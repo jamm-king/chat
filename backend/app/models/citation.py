@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional, Dict, Any
-from sqlalchemy import String, Text, JSON, ForeignKey
+from sqlalchemy import String, Text, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
@@ -17,10 +17,4 @@ class Citation(Base):
     message: Mapped["Message"] = relationship("Message", back_populates="citations")
     resource: Mapped["Resource"] = relationship("Resource", back_populates="citations")
     chunk: Mapped["Chunk"] = relationship("Chunk", back_populates="citations")
-
-
-
-
-
-
     

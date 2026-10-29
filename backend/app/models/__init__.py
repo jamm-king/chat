@@ -1,12 +1,7 @@
-from .users import User
-from .auth_session import AuthSession
-from .resources import Resource
-from .ingestion import IngestionJob
-from .message import Message
-from .chunk import Chunk
-from .citation import Citation
-
-
-
-
-
+from app.db.base import Base
+from app.models.users import User
+from app.models.resources import Resource
+from app.models.ingestion import IngestionJob
+from app.models.message import Message
+from app.models.chunk import Chunk
+from app.models.citation import Citation
