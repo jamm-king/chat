@@ -37,7 +37,7 @@
         "tags": [
           "Ingestions"
         ],
-        "summary": "URL 자료 비동기 색인 접수",
+        "summary": "공개 노션 페이지 URL 비동기 색인 접수(MVP)",
         "description": "jobId는 Backend 발급 멱등성 키. 동일 입력은 현재 작업 반환, 다른 입력 재사용은 충돌. 결과 보존 만료 후 정확한 중복은 404이며 재실행하지 않는다. 접수 기한 5초, 비동기 전체 작업 기한 10분. 상세: references.md.",
         "parameters": [
           {
@@ -666,7 +666,7 @@
             "type": "string",
             "format": "uri",
             "maxLength": 2048,
-            "description": "공개 정적 HTML의 HTTP(S) URL. 사용자 정보·fragment·비표준 포트 금지.",
+            "description": "로그인이나 별도 접근 권한 없이 열람 가능한 공개 노션 페이지의 HTTP(S) URL. MVP 대상 호스트는 notion.site, notion.so 및 각 하위 도메인. 사용자 지정 도메인·일반 웹페이지는 이후 확장. 사용자 정보·fragment·비표준 포트 금지.",
             "pattern": "^https?://"
           }
         },
@@ -674,7 +674,7 @@
           "type",
           "url"
         ],
-        "description": "공개 정적 HTML 한 페이지. 다운로드 최대 5 MiB(압축 해제 후), 추출 본문 최대 200,000자. 수집 최대 15초/시도, 리다이렉트 최대 3회. 공개 주소와 실제 연결 주소를 검증. 인증·JS 렌더링·파일 미지원."
+        "description": "웹 로더가 공개 노션 페이지 한 개를 스크래핑하고 필요 시 브라우저 렌더링을 수행. 공식 API 인증·사용자 쿠키·파일 입력·하위 페이지 재귀 수집은 미지원. 최초 HTML은 압축 해제 후 최대 5 MiB, 추출 본문 최대 200,000자. 직접 수집은 15초/시도. 브라우저 시도별 기한과 총 전송량·요청 수·메모리 한도는 수집 검증 후 구현 전에 확정. 전체 작업 기한은 10분. 문서 이동·리다이렉트 최대 3회. 렌더링 하위 요청을 포함해 공개 목적지와 실제 연결 주소를 검사. 상세: references.md와 ../architecture/loader-architecture.md."
       },
       "IngestionRequest": {
         "type": "object",
@@ -717,6 +717,7 @@
               "SOURCE_BLOCKED",
               "SOURCE_TOO_LARGE",
               "UNSUPPORTED_CONTENT_TYPE",
+              "UNSUPPORTED_SOURCE",
               "CONTENT_EXTRACTION_FAILED",
               "EMPTY_CONTENT",
               "EMBEDDING_FAILED",

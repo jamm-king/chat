@@ -1,8 +1,10 @@
 # AI Service API Reference
 
-v1 · 구현 전 제안 명세 · 2026-10-28
+v1 · 구현 전 제안 명세 · 2026-10-29
 
 Backend가 AI 서비스를 호출하기 위한 문서다. 필드 타입·필수 여부·응답 스키마는 [openapi.json](openapi.json)에 정의한다. 이 문서는 호출 흐름과 스키마로 표현하기 어려운 정책을 설명한다. 기존 [MOM](../../../docs/mom/2026-10-26.md)의 내부 API 5개를 구체화했다.
+
+찾은 웹페이지와 파일 등 다양한 자료의 수집·검색·근거 기반 답변을 지향하며, 활용 목적을 학습으로 제한하지 않는다. MVP 수집 대상은 공개 노션 페이지다. 웹 로더·파일 로더의 책임과 공통 출력은 [자료 로더 설계](../architecture/loader-architecture.md)를 따른다. 파일 로더와 일반 웹페이지 지원은 이후 확장한다.
 
 ## 공통 규칙
 
@@ -39,7 +41,7 @@ Content-Type: application/json
   "jobId": "22222222-2222-4222-8222-222222222222",
   "userId": "11111111-1111-4111-8111-111111111111",
   "resourceId": "33333333-3333-4333-8333-333333333333",
-  "source": { "type": "URL", "url": "https://example.com/lesson" }
+  "source": { "type": "URL", "url": "https://example.notion.site/reference-0123456789abcdef0123456789abcdef" }
 }
 ```
 
@@ -51,16 +53,21 @@ Content-Type: application/json
 
 | 수집 항목 | 지원·제한                                                                  |
 | --------- | --------------------------------------------------------------------------- |
-| 대상      | 로그인 없는 공개 정적 HTML 한 페이지                                        |
+| 대상      | 로그인이나 별도 접근 권한 없이 열람 가능한 공개 노션 페이지 한 개 |
 | URL       | HTTP(S), 최대 2,048자. 사용자 정보·fragment·비표준 포트 금지              |
 | 콘텐츠    | `text/html`, `application/xhtml+xml`만 지원                             |
-| 범위      | 페이지 본문만 수집. 하위 링크·이미지·스크립트 추가 요청 없음              |
-| 미지원    | JavaScript 렌더링, 로그인·쿠키 전달, 파일 업로드·PDF                      |
-| 한도      | 압축 해제 후 5 MiB, 추출 본문 200,000자. 초과 시 실패                       |
-| 시간      | DNS·연결·리다이렉트·다운로드 합산 15초/시도                              |
-| 주소 검사 | 공개 인터넷 주소만 허용. 리다이렉트 최대 3회, 매 단계와 실제 연결 주소 검사 |
+| 수집 방식 | 웹 로더에서 공개 웹페이지를 스크래핑한다. HTML 직접 추출을 우선하고 본문 확보에 필요하면 브라우저 렌더링을 사용한다. 노션 공식 API나 사용자 계정 연결은 요구하지 않는다. |
+| 범위      | 입력한 한 페이지의 본문 텍스트와 문서 구조. 렌더링에 필요한 스크립트·스타일·데이터 요청은 허용하되 하위 페이지·외부 링크를 재귀 수집하지 않는다. |
+| 미지원    | 일반 웹페이지, 로그인·사용자 쿠키 전달, 파일 입력, 첨부파일 본문, 이미지 OCR, 외부 임베드 본문 |
+| 한도      | 최초 HTML은 압축 해제 후 최대 5 MiB, 추출 본문은 최대 200,000자. 브라우저 총 전송량·요청 수·메모리 한도는 노션 수집 검증 후 구현 전에 확정한다. |
+| 시간      | 직접 수집은 15초/시도. 브라우저 렌더링은 별도의 유한한 기한을 구현 전에 확정하며, 두 경로 모두 전체 작업 기한 10분 안에 종료한다. |
+| 주소 검사 | 공개 인터넷 주소만 허용. 문서 이동·리다이렉트 최대 3회. 최초 요청·이동·렌더링 하위 요청마다 목적지와 실제 연결 주소를 검사한다. |
 
-접수 시 URL 문법 오류는 `400`이다. 접수 후 주소 차단·접근·추출·임베딩 실패는 HTTP 접수 오류 대신 작업의 `FAILED`로 조회한다. 원본 접근 실패에 대한 오류 코드는 OpenAPI의 `JobError`에 있다. 원본 HTTP 401/403은 `SOURCE_ACCESS_DENIED`, 404/410은 `SOURCE_NOT_FOUND`, 그 외 HTTP·DNS·연결 실패는 `SOURCE_FETCH_FAILED`다. charset 해석·본문 추출 실패는 `CONTENT_EXTRACTION_FAILED`다.
+MVP는 `notion.site`, `notion.so` 및 각 하위 도메인의 공개 페이지 URL을 대상으로 한다. 호스트는 URL 파싱 후 도메인 경계로 판정하며, 사용자 지정 도메인은 이후 확장한다. 최종 페이지가 공개 노션 문서인지 확인한다. 지원 대상 외 웹페이지는 비동기 작업의 `FAILED / UNSUPPORTED_SOURCE`로 반환한다. 일반 웹사이트를 수집할 수 있다는 의미로 해석하지 않는다.
+
+웹 로더의 노션 추출 결과는 공통 문서 형식으로 변환하고 이후 청킹·임베딩·색인 흐름을 공유한다. 로딩·로그인·접근 제한 화면만 가져왔거나 본문을 확보하지 못한 경우 성공으로 처리하지 않는다. 브라우저 세부 한도는 아직 확정되지 않은 설계 항목이며, 공개 노션의 본문·표·토글 추출을 검증한 후 정한다.
+
+접수 시 URL 문법 오류는 `400`이다. 접수 후 주소 차단·접근·추출·임베딩 실패는 HTTP 접수 오류 대신 작업의 `FAILED`로 조회한다. 원본 접근 실패에 대한 오류 코드는 OpenAPI의 `JobError`에 있다. 원본 HTTP 401/403 또는 로그인·접근 제한 화면은 `SOURCE_ACCESS_DENIED`, 404/410은 `SOURCE_NOT_FOUND`, 그 외 HTTP·DNS·연결 실패는 `SOURCE_FETCH_FAILED`다. 200 응답도 본문 수집 성공을 의미하지 않는다. 수집·렌더링 기한 초과는 `SOURCE_FETCH_TIMEOUT`, charset 해석·본문 추출 실패는 `CONTENT_EXTRACTION_FAILED`다. 정상적으로 추출한 문서에 색인할 텍스트가 없으면 `EMPTY_CONTENT`다. `UNSUPPORTED_SOURCE`는 `retryable: false`로 반환한다.
 
 ### 작업 조회
 
@@ -145,9 +152,9 @@ Content-Type: application/json
       "citationId": "1",
       "resourceId": "33333333-3333-4333-8333-333333333333",
       "chunkId": "44444444-4444-4444-8444-444444444444",
-      "title": "학습 자료",
+      "title": "프로젝트 참고 자료",
       "excerpt": "RAG는 검색한 자료를 근거로 답변을 생성한다.",
-      "locator": { "type": "URL", "url": "https://example.com/lesson", "section": null }
+      "locator": { "type": "URL", "url": "https://example.notion.site/reference-0123456789abcdef0123456789abcdef", "section": null }
     }
   ],
   "context": { "historyMessagesUsed": 0, "historyTruncated": false },
