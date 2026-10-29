@@ -1,0 +1,1679 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AI Service Internal API",
+    "version": "1.0.0",
+    "description": "구현 전 AI MVP 계약. 내부 API 5개의 경로·입출력 형식 유지. 단일 프로세스 메모리 작업 관리이며 자동 재시도·영속 큐·재시작 복구·30일 보존은 미구현. FastAPI·LangChain·PostgreSQL 기반. 상세: references.md."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8001",
+      "description": "로컬 개발 예시. 운영은 HTTPS 주소로 대체."
+    }
+  ],
+  "security": [
+    {
+      "ServiceBearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Ingestions"
+    },
+    {
+      "name": "Retrieval"
+    },
+    {
+      "name": "Answers"
+    },
+    {
+      "name": "Resources"
+    }
+  ],
+  "paths": {
+    "/internal/v1/ingestions": {
+      "post": {
+        "operationId": "createIngestion",
+        "tags": [
+          "Ingestions"
+        ],
+        "summary": "공개 노션 페이지 URL 비동기 색인 접수(MVP)",
+        "description": "jobId는 Backend 발급. 현재 프로세스 메모리에 남은 동일 입력은 현재 작업 반환, 다른 입력 재사용은 충돌. 접수는 비영속이며 재시작을 넘는 멱등성 없음. 자동 재시도·복구 없음. 유실 작업 재등록은 새 작업·자료 ID 사용. 접수 기한 5초, 실행 중 비동기 전체 기한 10분. 상세: references.md.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "기존 동일 작업. 재실행 없음.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionJob"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "신규 작업 메모리 접수 및 같은 프로세스 내 비동기 실행 예약. 재시작 시 유실 가능.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "Location": {
+                "description": "작업 조회 상대 URL(userId query 포함).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionJob"
+                },
+                "example": {
+                  "jobId": "22222222-2222-4222-8222-222222222222",
+                  "userId": "11111111-1111-4111-8111-111111111111",
+                  "resourceId": "33333333-3333-4333-8333-333333333333",
+                  "status": "QUEUED",
+                  "createdAt": "2026-10-28T06:00:00Z",
+                  "startedAt": null,
+                  "completedAt": null,
+                  "result": null,
+                  "error": null
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "JOB_NOT_FOUND (향후 확장용 응답 유지. MVP 신규 접수에서는 사용하지 않음)",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "JOB_ID_CONFLICT / INGESTION_IN_PROGRESS / RESOURCE_ALREADY_INDEXED / RESOURCE_DELETED",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/ProviderError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/ServiceTimeout"
+          }
+        }
+      }
+    },
+    "/internal/v1/ingestions/{jobId}": {
+      "get": {
+        "operationId": "getIngestion",
+        "tags": [
+          "Ingestions"
+        ],
+        "summary": "소유자 범위의 색인 작업 조회",
+        "description": "현재 프로세스 메모리의 작업 조회. 재시작 시 상태 유실, 이전 작업은 404 JOB_NOT_FOUND. 호출자는 폴링을 중단하고 자동 재접수하지 않음. 30일 보존·재시작 복구 없음. 진행 중 폴링은 Retry-After 사용. 본문·미정의 query 금지. 상세: references.md.",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "작업 현재 상태",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionJob"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "JOB_NOT_FOUND",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/ProviderError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/ServiceTimeout"
+          }
+        }
+      }
+    },
+    "/internal/v1/resources/{resourceId}": {
+      "delete": {
+        "operationId": "deleteResource",
+        "tags": [
+          "Resources"
+        ],
+        "summary": "검색 제외 및 온라인 RAG 데이터 삭제",
+        "description": "사용자 범위의 검색 제외·청크·임베딩 삭제 후 204. 없는 자료도 204. 현재 프로세스 작업을 취소하고 색인 완료 반영과 조율하여 재공개 방지. 삭제 이력은 메모리에만 유지. 영속 삭제 이력·분산 복구·자동 재시도 없음. 실패 503, 기한 초과 504. 처리 기한 10초. 본문·미정의 query 금지. 상세: references.md.",
+        "parameters": [
+          {
+            "name": "resourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "삭제 완료 또는 이미 없음. 본문 없음.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/ProviderError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/ServiceTimeout"
+          }
+        }
+      }
+    },
+    "/internal/v1/retrieval/search": {
+      "post": {
+        "operationId": "searchResources",
+        "tags": [
+          "Retrieval"
+        ],
+        "summary": "명시한 사용자·자료 범위의 관련 청크 검색",
+        "description": "빈 자료 범위는 빈 결과. 지정 자료 전체를 검증하며 일부 실패 시 부분 결과 없음. 결과는 rank 순이며 원시 점수와 페이지네이션은 제공하지 않음. 처리 기한 15초. 상세: references.md.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "관련 청크. 결과가 없으면 results: [].",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "RESOURCE_NOT_FOUND",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "RESOURCE_NOT_READY / RESOURCE_SCOPE_CHANGED",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/ProviderError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/ServiceTimeout"
+          }
+        }
+      }
+    },
+    "/internal/v1/answers": {
+      "post": {
+        "operationId": "createAnswer",
+        "tags": [
+          "Answers"
+        ],
+        "summary": "일반 또는 자료 기반 동기 답변 생성",
+        "description": "멱등성·대화 저장·스트리밍 없음. 현재 질문은 message에만 전달. history는 완료 턴 최대 20개, 전체 입력 텍스트 32,000자 이하. RESOURCE의 빈 범위는 INSUFFICIENT_EVIDENCE. GENERAL에서 resourceIds 금지. 처리 기한 60초. 상세: references.md.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ANSWERED / INSUFFICIENT_EVIDENCE / REFUSED",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "RESOURCE_NOT_FOUND (RESOURCE 모드)",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "RESOURCE_NOT_READY / RESOURCE_SCOPE_CHANGED (RESOURCE 모드)",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/ProviderError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/ServiceTimeout"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ServiceBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Backend 전용 서비스 토큰. 사용자 세션·브라우저 토큰과 별개."
+      }
+    },
+    "schemas": {
+      "ErrorDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "field",
+          "reason"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "INVALID_REQUEST",
+                  "CONTEXT_LIMIT_EXCEEDED",
+                  "UNAUTHORIZED",
+                  "FORBIDDEN",
+                  "RESOURCE_NOT_FOUND",
+                  "JOB_NOT_FOUND",
+                  "RESOURCE_NOT_READY",
+                  "JOB_ID_CONFLICT",
+                  "INGESTION_IN_PROGRESS",
+                  "RESOURCE_ALREADY_INDEXED",
+                  "RESOURCE_DELETED",
+                  "RESOURCE_SCOPE_CHANGED",
+                  "PAYLOAD_TOO_LARGE",
+                  "UNSUPPORTED_MEDIA_TYPE",
+                  "RATE_LIMITED",
+                  "AI_PROVIDER_ERROR",
+                  "AI_SERVICE_UNAVAILABLE",
+                  "AI_SERVICE_TIMEOUT",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "retryable",
+              "details"
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "error",
+          "requestId"
+        ]
+      },
+      "Source": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "URL"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048,
+            "description": "로그인이나 별도 접근 권한 없이 열람 가능한 공개 노션 페이지의 HTTP(S) URL. MVP 대상 호스트는 notion.site, notion.so 및 각 하위 도메인. 사용자 지정 도메인·일반 웹페이지는 이후 확장. 사용자 정보·fragment·비표준 포트 금지.",
+            "pattern": "^https?://"
+          }
+        },
+        "required": [
+          "type",
+          "url"
+        ],
+        "description": "웹 로더가 공개 노션 페이지 한 개를 스크래핑하고 필요 시 브라우저 렌더링을 수행. 공식 API 인증·사용자 쿠키·파일 입력·하위 페이지 재귀 수집은 미지원. 최초 HTML은 압축 해제 후 최대 5 MiB, 추출 본문 최대 200,000자. 직접 수집은 15초/시도. 브라우저 시도별 기한과 총 전송량·요청 수·메모리 한도는 수집 검증 후 구현 전에 확정. 전체 작업 기한은 10분. 문서 이동·리다이렉트 최대 3회. 렌더링 하위 요청을 포함해 공개 목적지와 실제 연결 주소를 검사. 상세: references.md와 ../architecture/loader-architecture.md."
+      },
+      "IngestionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "resourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          }
+        },
+        "required": [
+          "jobId",
+          "userId",
+          "resourceId",
+          "source"
+        ]
+      },
+      "JobError": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "SOURCE_ACCESS_DENIED",
+              "SOURCE_NOT_FOUND",
+              "SOURCE_FETCH_FAILED",
+              "SOURCE_FETCH_TIMEOUT",
+              "SOURCE_BLOCKED",
+              "SOURCE_TOO_LARGE",
+              "UNSUPPORTED_CONTENT_TYPE",
+              "UNSUPPORTED_SOURCE",
+              "CONTENT_EXTRACTION_FAILED",
+              "EMPTY_CONTENT",
+              "EMBEDDING_FAILED",
+              "INDEX_WRITE_FAILED",
+              "INGESTION_TIMEOUT",
+              "RESOURCE_DELETED",
+              "INTERNAL_ERROR"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "description": "비동기 작업 실패. retryable은 사용자 선택에 따른 새 jobId 재시도 가능 정보이며 자동 재시도 지시가 아님. 작업 유실 뒤에는 새 resourceId도 사용. CANCELLED의 코드는 RESOURCE_DELETED이며 retryable=false."
+      },
+      "IngestionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "canonicalUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "chunkCount": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "indexedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "title",
+          "canonicalUrl",
+          "chunkCount",
+          "indexedAt"
+        ]
+      },
+      "IngestionJob": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "resourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "QUEUED",
+              "EXTRACTING",
+              "INDEXING",
+              "SUCCEEDED",
+              "FAILED",
+              "CANCELLED"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IngestionResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "jobId",
+          "userId",
+          "resourceId",
+          "status",
+          "createdAt",
+          "startedAt",
+          "completedAt",
+          "result",
+          "error"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "QUEUED"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "startedAt": {
+                  "type": "null"
+                },
+                "completedAt": {
+                  "type": "null"
+                },
+                "result": {
+                  "type": "null"
+                },
+                "error": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "EXTRACTING",
+                    "INDEXING"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "startedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "completedAt": {
+                  "type": "null"
+                },
+                "result": {
+                  "type": "null"
+                },
+                "error": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "SUCCEEDED"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "startedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "completedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "result": {
+                  "$ref": "#/components/schemas/IngestionResult"
+                },
+                "error": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "FAILED",
+                    "CANCELLED"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "completedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "result": {
+                  "type": "null"
+                },
+                "error": {
+                  "$ref": "#/components/schemas/JobError"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "CANCELLED"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "error": {
+                  "properties": {
+                    "code": {
+                      "const": "RESOURCE_DELETED"
+                    },
+                    "retryable": {
+                      "const": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "description": "진행: QUEUED → EXTRACTING → INDEXING → SUCCEEDED. 각 진행 상태는 FAILED/CANCELLED로 종료 가능. 종료 상태 불변. 프로세스 실행 중 전체 기한 10분. 작업은 메모리 관리, 재시작 시 유실되며 복구·30일 보존 없음. 완료된 검색용 DB 데이터는 유지. references.md 참조."
+      },
+      "SourceLocator": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "URL"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "url",
+          "section"
+        ]
+      },
+      "SearchRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000,
+            "pattern": "\\S"
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "필수의 명시적 범위. 빈 배열은 빈 검색 범위이며 전체 검색으로 확장하지 않는다."
+          },
+          "topK": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 5
+          }
+        },
+        "required": [
+          "userId",
+          "query",
+          "resourceIds"
+        ]
+      },
+      "SearchResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "resourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chunkId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "locator": {
+            "$ref": "#/components/schemas/SourceLocator"
+          }
+        },
+        "required": [
+          "resourceId",
+          "chunkId",
+          "title",
+          "content",
+          "rank",
+          "locator"
+        ]
+      },
+      "SearchResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchResult"
+            },
+            "maxItems": 20
+          }
+        },
+        "required": [
+          "results"
+        ]
+      },
+      "HistoryMessage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "ASSISTANT"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000,
+            "pattern": "\\S"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ]
+      },
+      "Citation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citationId": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "resourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chunkId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "excerpt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "locator": {
+            "$ref": "#/components/schemas/SourceLocator"
+          }
+        },
+        "required": [
+          "citationId",
+          "resourceId",
+          "chunkId",
+          "title",
+          "excerpt",
+          "locator"
+        ],
+        "description": "본문 [n]과 citationId가 대응. ID는 1부터 연속, 중복 청크는 같은 ID 사용. excerpt는 실제 청크의 연속 부분 문자열. 출처와 본문 참조는 양방향 일치."
+      },
+      "AnswerContext": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "historyMessagesUsed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20
+          },
+          "historyTruncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "historyMessagesUsed",
+          "historyTruncated"
+        ]
+      },
+      "GeneralAnswerRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000,
+            "pattern": "\\S"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HistoryMessage"
+            },
+            "maxItems": 20,
+            "default": [],
+            "description": "오래된 순의 완료된 USER/ASSISTANT 쌍. 현재 질문 제외. message와 합산 32,000자 이하."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "GENERAL"
+            ]
+          }
+        },
+        "required": [
+          "userId",
+          "message",
+          "mode"
+        ]
+      },
+      "ResourceAnswerRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000,
+            "pattern": "\\S"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HistoryMessage"
+            },
+            "maxItems": 20,
+            "default": [],
+            "description": "오래된 순의 완료된 USER/ASSISTANT 쌍. 현재 질문 제외. message와 합산 32,000자 이하."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "RESOURCE"
+            ]
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "필수의 명시적 범위. 빈 배열은 빈 검색 범위이며 전체 검색으로 확장하지 않는다."
+          }
+        },
+        "required": [
+          "userId",
+          "message",
+          "mode",
+          "resourceIds"
+        ]
+      },
+      "AnswerRequest": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/GeneralAnswerRequest"
+          },
+          {
+            "$ref": "#/components/schemas/ResourceAnswerRequest"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "mode",
+          "mapping": {
+            "GENERAL": "#/components/schemas/GeneralAnswerRequest",
+            "RESOURCE": "#/components/schemas/ResourceAnswerRequest"
+          }
+        },
+        "description": "history는 완료된 USER/ASSISTANT 쌍, 현재 질문 제외, 오래된 순. message와 합산 32,000자 이하. 입력 예산 초과 시 오래된 쌍부터 제외. GENERAL에서는 resourceIds 금지."
+      },
+      "AnswerResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "answerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "GENERAL",
+              "RESOURCE"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ANSWERED",
+              "INSUFFICIENT_EVIDENCE",
+              "REFUSED"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16000
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "maxItems": 10
+          },
+          "context": {
+            "$ref": "#/components/schemas/AnswerContext"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "answerId",
+          "mode",
+          "status",
+          "content",
+          "citations",
+          "context",
+          "createdAt"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "mode": {
+                  "const": "GENERAL"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "ANSWERED",
+                    "REFUSED"
+                  ]
+                },
+                "citations": {
+                  "maxItems": 0
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "mode": {
+                  "const": "RESOURCE"
+                },
+                "status": {
+                  "const": "ANSWERED"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "citations": {
+                  "minItems": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "INSUFFICIENT_EVIDENCE",
+                    "REFUSED"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "citations": {
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        ],
+        "description": "동기 생성 결과. answerId 조회·저장·멱등성 없음. context는 현재 질문을 제외한 이력 사용 수와 이력 절단 여부. content는 최대 16,000자 Markdown."
+      }
+    },
+    "headers": {
+      "RequestId": {
+        "description": "실제 HTTP 요청 추적 UUID. 멱등성 키가 아니다.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "CacheControl": {
+        "description": "민감 응답 캐시 금지.",
+        "schema": {
+          "type": "string",
+          "const": "no-store"
+        }
+      },
+      "RetryAfter": {
+        "description": "다음 폴링 또는 사용자가 재시도를 선택할 때 참고할 대기 시간(초). 자동 재시도를 지시하지 않음.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "parameters": {
+      "RequestId": {
+        "name": "X-Request-Id",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "description": "선택 추적 UUID. 생략 시 서버 발급."
+      },
+      "UserId": {
+        "name": "userId",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "description": "Backend가 인증한 사용자 ID."
+      }
+    },
+    "responses": {
+      "InvalidRequest": {
+        "description": "INVALID_REQUEST 또는 답변 생성의 CONTEXT_LIMIT_EXCEEDED",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "UNAUTHORIZED",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "FORBIDDEN",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "PAYLOAD_TOO_LARGE",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "UNSUPPORTED_MEDIA_TYPE",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "RATE_LIMITED",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          },
+          "Retry-After": {
+            "$ref": "#/components/headers/RetryAfter"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "INTERNAL_ERROR",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "ProviderError": {
+        "description": "AI_PROVIDER_ERROR",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "AI_SERVICE_UNAVAILABLE. Retry-After는 가능할 때 제공.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          },
+          "Retry-After": {
+            "$ref": "#/components/headers/RetryAfter"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "ServiceTimeout": {
+        "description": "AI_SERVICE_TIMEOUT",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      }
+    }
+  },
+  "externalDocs": {
+    "description": "호출 방법과 정책 설명",
+    "url": "./references.md"
+  }
+}
