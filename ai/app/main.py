@@ -16,7 +16,8 @@ from sqlalchemy.orm import sessionmaker
 from starlette.concurrency import run_in_threadpool
 
 from app.config import Settings
-from app.db import NotionConnection, get_connection, init_db, save_connection
+from app.db import NotionConnection, NotionResource, get_connection, init_db, save_connection
+from app.resources import get_resource, register_resource
 from app.loader import load_page, summarize_page
 from app.notion_client import NotionApiError, NotionClient
 from app.notion_auth import (
@@ -25,6 +26,7 @@ from app.notion_auth import (
 )
 from app.schemas import (
     AuthorizationResponse, ConnectionResponse, NotionPageListResponse, NotionPageResponse,
+    NotionResourceResponse, NotionResourceSummary, RegisterNotionResourceRequest,
 )
 
 COOKIE_NAME = "notion_oauth_browser"
@@ -123,9 +125,57 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
         output = NotionPageResponse(
             id=page_id, title=metadata["title"], url=metadata["source"],
             last_edited_time=metadata["last_edited_time"], content=document.page_content,
+            raw_content=metadata["raw_content"], references=metadata["references"],
             content_status=metadata["content_status"], truncated=metadata["truncated"],
             unknown_block_ids=metadata["unknown_block_ids"], warnings=metadata["warnings"],
         )
+        return JSONResponse(output.model_dump(mode="json"), headers={"Cache-Control": "no-store"})
+
+    @app.post("/integrations/notion/connections/{connection_id}/resources",
+              response_model=NotionResourceResponse, status_code=201,
+              summary="Register one page, optionally as a selected reference of a parent")
+    def create_resource(
+        request: Request, connection_id: UUID, body: RegisterNotionResourceRequest,
+        user_id: Annotated[UUID, Query(alias="userId")],
+        client: Annotated[NotionClient, Depends(get_notion_client)],
+    ):
+        try:
+            with request.app.state.sessions() as session:
+                output = register_resource(session, client, str(user_id), str(connection_id), body)
+        except SQLAlchemyError:
+            raise HTTPException(503, "Resource storage is unavailable") from None
+        return JSONResponse(output.model_dump(mode="json"), status_code=201,
+                            headers={"Cache-Control": "no-store"})
+
+    @app.get("/integrations/notion/connections/{connection_id}/resources",
+             response_model=list[NotionResourceSummary], summary="List registered Notion resources")
+    def list_resources(
+        request: Request, connection_id: UUID,
+        user_id: Annotated[UUID, Query(alias="userId")],
+        client: Annotated[NotionClient, Depends(get_notion_client)],
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+        offset: Annotated[int, Query(ge=0)] = 0,
+    ):
+        try:
+            with request.app.state.sessions() as session:
+                resources = session.scalars(select(NotionResource).where(
+                    NotionResource.user_id == str(user_id),
+                    NotionResource.connection_id == str(connection_id),
+                ).order_by(NotionResource.created_at, NotionResource.id).limit(limit).offset(offset)).all()
+                output = [NotionResourceSummary.model_validate(item).model_dump(mode="json") for item in resources]
+        except SQLAlchemyError:
+            raise HTTPException(503, "Resource storage is unavailable") from None
+        return JSONResponse(output, headers={"Cache-Control": "no-store"})
+
+    @app.get("/integrations/notion/resources/{resource_id}", response_model=NotionResourceResponse,
+             dependencies=[Depends(require_service_token)], summary="Read a saved resource and its references")
+    def read_resource(request: Request, resource_id: UUID,
+                      user_id: Annotated[UUID, Query(alias="userId")]):
+        try:
+            with request.app.state.sessions() as session:
+                output = NotionResourceResponse.model_validate(get_resource(session, str(user_id), str(resource_id)))
+        except SQLAlchemyError:
+            raise HTTPException(503, "Resource storage is unavailable") from None
         return JSONResponse(output.model_dump(mode="json"), headers={"Cache-Control": "no-store"})
 
     @app.get("/integrations/notion/authorize", response_model=AuthorizationResponse,

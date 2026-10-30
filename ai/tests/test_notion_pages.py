@@ -110,8 +110,8 @@ def test_selected_page_preserves_markdown_and_metadata(page_app):
     assert response.status_code == 200
     assert response.json() == {
         "id": PAGE_ID, "title": "회의록", "url": "https://www.notion.so/example",
-        "last_edited_time": "2026-10-30T01:00:00Z", "content": MARKDOWN,
-        "content_status": "complete", "truncated": False, "unknown_block_ids": [], "warnings": [],
+        "last_edited_time": "2026-10-30T01:00:00Z", "content": MARKDOWN, "raw_content": MARKDOWN,
+        "content_status": "complete", "truncated": False, "unknown_block_ids": [], "warnings": [], "references": [],
     }
     assert response.headers["Cache-Control"] == "no-store"
     assert [request.method for request in calls] == ["GET", "GET"]

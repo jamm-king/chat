@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import DateTime, String, Text, UniqueConstraint, select
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
@@ -23,6 +23,31 @@ class NotionConnection(Base):
     bot_id: Mapped[str] = mapped_column(String(36))
     access_token_encrypted: Mapped[str] = mapped_column(Text)
     refresh_token_encrypted: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class NotionResource(Base):
+    __tablename__ = "notion_resources"
+    __table_args__ = (UniqueConstraint("connection_id", "page_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    connection_id: Mapped[str] = mapped_column(ForeignKey("notion_connections.id"), index=True)
+    page_id: Mapped[str] = mapped_column(String(36))
+    parent_resource_id: Mapped[str | None] = mapped_column(ForeignKey("notion_resources.id"), index=True)
+    title: Mapped[str | None] = mapped_column(Text)
+    url: Mapped[str] = mapped_column(Text)
+    raw_content: Mapped[str] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(Text)
+    content_status: Mapped[str] = mapped_column(String(16))
+    references: Mapped[list[dict]] = mapped_column(JSON)
+    truncated: Mapped[bool] = mapped_column(Boolean)
+    unknown_block_ids: Mapped[list[str]] = mapped_column(JSON)
+    warnings: Mapped[list[dict]] = mapped_column(JSON)
+    source_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

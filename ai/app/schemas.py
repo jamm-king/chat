@@ -46,9 +46,50 @@ class NotionContentWarning(BaseModel):
     message: str
 
 
+class NotionReference(BaseModel):
+    kind: Literal["page", "database", "video", "image", "audio", "file"]
+    title: str | None
+    url: str
+    page_id: UUID | None = None
+    can_register: bool = False
+
+
 class NotionPageResponse(NotionPageSummary):
+    raw_content: str
     content: str
     content_status: Literal["complete", "partial"]
+    truncated: bool
+    unknown_block_ids: list[UUID]
+    warnings: list[NotionContentWarning]
+    references: list[NotionReference]
+
+
+class RegisterNotionResourceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    page_id: UUID
+    parent_resource_id: UUID | None = None
+
+
+class NotionResourceSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    connection_id: UUID
+    page_id: UUID
+    parent_resource_id: UUID | None
+    title: str | None
+    url: str
+    content_status: Literal["complete", "partial"]
+    created_at: datetime
+
+
+class NotionResourceResponse(NotionResourceSummary):
+    raw_content: str
+    content: str
+    references: list[NotionReference]
+    source_updated_at: datetime
+    collected_at: datetime
     truncated: bool
     unknown_block_ids: list[UUID]
     warnings: list[NotionContentWarning]

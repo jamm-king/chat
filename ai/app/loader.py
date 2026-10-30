@@ -6,6 +6,7 @@ from langchain_core.documents import Document
 
 from app.notion_client import NotionClient, NotionPage, invalid_response
 from app.schemas import NotionPageSummary
+from app.references import extract_references
 
 
 def extract_title(page: NotionPage) -> str | None:
@@ -45,4 +46,6 @@ def load_page(client: NotionClient, page_id: UUID) -> list[Document]:
         "truncated": content.truncated,
         "unknown_block_ids": [str(item) for item in content.unknown_block_ids],
         "warnings": [item.model_dump() for item in content.warnings],
+        "raw_content": content.markdown,
+        "references": [item.model_dump(mode="json") for item in extract_references(content.markdown)],
     })]
