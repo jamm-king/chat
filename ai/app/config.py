@@ -1,4 +1,5 @@
 from cryptography.fernet import Fernet
+from typing import Literal
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,6 +16,7 @@ class Settings(BaseSettings):
     oauth_state_ttl_seconds: int = Field(default=600, ge=1, le=3600)
     oauth_cookie_secure: bool = False
     notion_timeout_seconds: float = Field(default=15, gt=0, le=60)
+    notion_api_version: Literal["2026-03-11"] = "2026-03-11"
 
     @field_validator("token_encryption_key")
     @classmethod

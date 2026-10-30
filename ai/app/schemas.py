@@ -1,5 +1,6 @@
 from datetime import datetime
 from uuid import UUID
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
@@ -25,3 +26,29 @@ class ConnectionResponse(BaseModel):
     bot_id: UUID
     created_at: datetime
     status: str = "connected"
+
+
+class NotionPageSummary(BaseModel):
+    id: UUID
+    title: str | None
+    url: str
+    last_edited_time: datetime
+
+
+class NotionPageListResponse(BaseModel):
+    results: list[NotionPageSummary]
+    has_more: bool
+    next_cursor: str | None
+
+
+class NotionContentWarning(BaseModel):
+    code: str
+    message: str
+
+
+class NotionPageResponse(NotionPageSummary):
+    content: str
+    content_status: Literal["complete", "partial"]
+    truncated: bool
+    unknown_block_ids: list[UUID]
+    warnings: list[NotionContentWarning]

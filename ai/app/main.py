@@ -5,6 +5,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx
+from cryptography.fernet import InvalidToken
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -15,12 +16,16 @@ from sqlalchemy.orm import sessionmaker
 from starlette.concurrency import run_in_threadpool
 
 from app.config import Settings
-from app.db import NotionConnection, init_db, save_connection
+from app.db import NotionConnection, get_connection, init_db, save_connection
+from app.loader import load_page, summarize_page
+from app.notion_client import NotionApiError, NotionClient
 from app.notion_auth import (
     NotionOAuthError, OAuthStateStore, consume_state, create_authorization_url,
-    encrypt_token, exchange_code,
+    decrypt_token, encrypt_token, exchange_code,
 )
-from app.schemas import AuthorizationResponse, ConnectionResponse
+from app.schemas import (
+    AuthorizationResponse, ConnectionResponse, NotionPageListResponse, NotionPageResponse,
+)
 
 COOKIE_NAME = "notion_oauth_browser"
 COOKIE_PATH = "/integrations/notion/callback"
@@ -54,6 +59,16 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
 
     app = FastAPI(title="찾", lifespan=lifespan)
 
+    @app.exception_handler(NotionApiError)
+    async def notion_error_handler(request: Request, error: NotionApiError):
+        headers = {"Cache-Control": "no-store"}
+        if error.retry_after:
+            headers["Retry-After"] = error.retry_after
+        return JSONResponse(
+            {"error": {"code": error.code, "message": str(error)}},
+            status_code=error.status_code, headers=headers,
+        )
+
     def require_service_token(
         request: Request,
         credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
@@ -63,6 +78,55 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
             credentials.credentials.encode(), config.ai_service_token.get_secret_value().encode()
         ):
             raise HTTPException(401, "Invalid service token", headers={"WWW-Authenticate": "Bearer"})
+
+    def get_notion_client(
+        request: Request, connection_id: UUID,
+        user_id: Annotated[UUID, Query(alias="userId")],
+        _: Annotated[None, Depends(require_service_token)],
+    ) -> NotionClient:
+        config = request.app.state.settings
+        try:
+            with request.app.state.sessions() as session:
+                connection = get_connection(session, str(user_id), str(connection_id))
+                if connection is None:
+                    raise HTTPException(404, "Notion connection not found")
+                token = decrypt_token(connection.access_token_encrypted,
+                                      config.token_encryption_key.get_secret_value())
+        except SQLAlchemyError:
+            raise HTTPException(503, "Connection storage is unavailable") from None
+        except InvalidToken:
+            raise HTTPException(503, "Stored Notion credentials could not be read") from None
+        return NotionClient(request.app.state.notion_client, token, config.notion_api_version)
+
+    @app.get("/integrations/notion/connections/{connection_id}/pages",
+             response_model=NotionPageListResponse,
+             summary="Search pages shared with the Notion connection",
+             description="Title search; results are not an exhaustive inventory of all accessible pages.")
+    def search_pages(
+        client: Annotated[NotionClient, Depends(get_notion_client)],
+        query: Annotated[str | None, Query(max_length=1000)] = None,
+        start_cursor: Annotated[str | None, Query(alias="startCursor", min_length=1, max_length=1000)] = None,
+        page_size: Annotated[int, Query(alias="pageSize", ge=1, le=100)] = 50,
+    ):
+        pages = client.search_pages(query=query, start_cursor=start_cursor, page_size=page_size)
+        output = NotionPageListResponse(
+            results=[summarize_page(page) for page in pages.results if not page.archived and not page.in_trash],
+            has_more=pages.has_more, next_cursor=pages.next_cursor,
+        )
+        return JSONResponse(output.model_dump(mode="json"), headers={"Cache-Control": "no-store"})
+
+    @app.get("/integrations/notion/connections/{connection_id}/pages/{page_id}",
+             response_model=NotionPageResponse, summary="Read a selected Notion page")
+    def preview_page(page_id: UUID, client: Annotated[NotionClient, Depends(get_notion_client)]):
+        document = load_page(client, page_id)[0]
+        metadata = document.metadata
+        output = NotionPageResponse(
+            id=page_id, title=metadata["title"], url=metadata["source"],
+            last_edited_time=metadata["last_edited_time"], content=document.page_content,
+            content_status=metadata["content_status"], truncated=metadata["truncated"],
+            unknown_block_ids=metadata["unknown_block_ids"], warnings=metadata["warnings"],
+        )
+        return JSONResponse(output.model_dump(mode="json"), headers={"Cache-Control": "no-store"})
 
     @app.get("/integrations/notion/authorize", response_model=AuthorizationResponse,
              dependencies=[Depends(require_service_token)])
