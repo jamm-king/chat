@@ -1,7 +1,6 @@
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-
 from dotenv import load_dotenv
 from jose import jwt, JWTError
 from passlib.context import CryptContext

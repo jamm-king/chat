@@ -13,5 +13,5 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
-    resources: Mapped[List["Resource"]] = relationship("Resource", back_populates="user", cascade="all, delete-orphan")
+    resources: Mapped[List["Resource"]] = relationship("Resources", back_populates="user", cascade="all, delete-orphan")
     messages: Mapped[List["Message"]] = relationship("Message", back_populates="user", cascade="all, delete-orphan")
