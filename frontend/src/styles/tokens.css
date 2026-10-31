@@ -7,6 +7,7 @@
     --accent-soft: #f1e6ff;
     --line: #eee8f7;
     --card: rgba(255, 255, 255, 0.72);
+    --on-accent: #ffffff;
 }
 :root[data-theme="dark"]{
     --bg: #09060f;
@@ -16,6 +17,7 @@
     --accent-soft: rgba(196, 92, 255, 0.25);
     --line: rgba(190,80,255,0.3);
     --card: rgba(14,8 ,26, 0.82);
+    --on-accent: #12051f;
 }
 
 body{
@@ -26,4 +28,9 @@ body{
 
 h1 {
     color: var(--accent);
+}
+.theme-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
 }

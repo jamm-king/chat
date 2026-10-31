@@ -13,7 +13,7 @@ export default function ThemeToggle () {
         saveTheme(theme);
     }
   return (
-    <button type="button" onClick={toggle}>
+    <button type="button" className="theme-toggle" onClick={toggle}>
         {dark ? "밝은 모드" : "야간 모드"}
     </button>
   )
