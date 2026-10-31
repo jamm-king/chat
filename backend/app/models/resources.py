@@ -5,7 +5,7 @@ from sqlalchemy import String, JSON, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
-class Resource(Base):
+class Resources(Base):
     __tablename__ = "resources"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -19,5 +19,4 @@ class Resource(Base):
 
     user: Mapped["User"] = relationship("User", back_populates="resources")
     ingestion_jobs: Mapped[List["IngestionJob"]] = relationship("IngestionJob", back_populates="resource", cascade="all, delete-orphan")
-    chunks: Mapped[List["Chunk"]] = relationship("Chunk", back_populates="resource", cascade="all, delete-orphan")
     citations: Mapped[List["Citation"]] = relationship("Citation", back_populates="resource", cascade="all, delete-orphan")

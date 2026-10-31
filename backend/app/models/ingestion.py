@@ -15,4 +15,4 @@ class IngestionJob(Base):
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
-    resource: Mapped["Resource"] = relationship("Resource", back_populates="ingestion_jobs")
+    resource: Mapped["Resources"] = relationship("Resources", back_populates="ingestion_jobs")
