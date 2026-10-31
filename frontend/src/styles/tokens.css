@@ -1,0 +1,20 @@
+/* 화면에서는 색 코드 대신 var()사용*/
+:root {
+    --bg: #f6f4fb;/*바탕색*/
+    --text: #1d1530;
+    --muted: #8a7fa3;
+    --accent: #9d2cff; /*찾 프로젝트 메인 컬러: 네온 퍼플*/
+    --accent-soft: #f1e6ff;
+    --line: #eee8f7;
+    --card: rgba(255, 255, 255, 0.72);
+}
+
+body{
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+}
+
+h1 {
+    color: var(--accent);
+}
