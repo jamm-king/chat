@@ -5,7 +5,6 @@ from fastapi import (
     HTTPException,
     status
 )
-from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.users import User
@@ -26,17 +25,17 @@ from app.core.security import (
     REFRESH_TOKEN_EXPIRE_DAYS
 )
 from datetime import timedelta
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # Router
 router = APIRouter(prefix="/api/v1",tags=["Auth"])
 
-# OAuth2
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+# Bearer Token 인증 객체
+bearer_scheme = HTTPBearer()
 
 
 # 1. 회원가입
-@router.post(
-    "/auth/signup",
+@router.post("/auth/signup",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED
 )
@@ -65,8 +64,7 @@ def signup(
 
 
 # 2. 로그인
-@router.post(
-    "/auth/login",
+@router.post("/auth/login",
     response_model=TokenResponse
 )
 def login(
@@ -75,9 +73,7 @@ def login(
 ):
     # 사용자 조회
     user = (
-        db.query(User)
-        .filter(User.email == user_data.email)
-        .first()
+        db.query(User).filter(User.email == user_data.email).first()
     )
     # 사용자 존재 여부 + 비밀번호 확인
     if not user or not verify_password(user_data.password,user.password_hash):
@@ -88,9 +84,7 @@ def login(
 
     # Access Token 생성
     access_token = create_access_token(
-        data={
-            "sub": user.email
-        })
+        data={"sub": user.email})
     # Refresh Token 생성
     refresh_token_value, jti = create_refresh_token(
         data={"sub": user.email})
@@ -111,8 +105,7 @@ def login(
     }
 
 # 3. Refresh Token Rotation
-@router.post(
-    "/auth/refresh",
+@router.post("/auth/refresh",
     response_model=TokenResponse
 )
 def refresh_access_token(
@@ -158,15 +151,20 @@ def refresh_access_token(
         )
     # DB 기준 만료 여부 확인
     now = datetime.now(timezone.utc)
-    if db_token.expires_at < now:
+    expires_at = db_token.expires_at
+
+    # DB에서 가져온 시간이 naive라면 UTC timezone을 지정
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at < now:
         raise HTTPException(
             status_code=401,
             detail="만료된 리프레시 토큰입니다."
         )
+
     # 6. 사용자 조회
-    user = (
-        db.query(User).filter(User.email == email).first()
-    )
+    user = (db.query(User).filter(User.email == email).first())
     if not user:
         raise HTTPException(
             status_code=404,
@@ -181,13 +179,11 @@ def refresh_access_token(
     # 8. 기존 Refresh Token 폐기
     db_token.is_revoked = True
     # 9. 새로운 Access Token 생성
-    new_access_token = create_access_token(
-        data={"sub": user.email})
+    new_access_token = create_access_token(data={"sub": user.email})
     # 10. 새로운 Refresh Token 생성
     new_refresh_token_value, new_jti = (
         create_refresh_token(
-            data={"sub": user.email}
-        ))
+            data={"sub": user.email}))
     # 11. 새로운 Refresh Token DB 저장
     new_db_token = RefreshToken(
         user_id=user.id,
@@ -205,14 +201,14 @@ def refresh_access_token(
     }
     
 # 4. 현재 로그인 사용자 조회
-@router.get(
-    "/users/me",
+@router.get("/users/me",
     response_model=UserResponse
 )
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db)
 ):
+    token = credentials.credentials
     # Access Token 검증
     payload = verify_token(token)
     if not payload:
@@ -235,16 +231,11 @@ def get_current_user(
         )
     # 사용자 조회
     user = (
-        db.query(User)
-        .filter(User.email == email)
-        .first()
+        db.query(User).filter(User.email == email).first()
     )
 
     if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="사용자를 찾을 수 없습니다."
-        )
+        raise HTTPException(status_code=401,detail="사용자를 찾을 수 없습니다.")
     return user
 
 # 5. 로그아웃
@@ -261,12 +252,11 @@ def logout(
         if jti:
             # DB에서 해당 토큰 조회
             db_token = (
-                db.query(RefreshToken)
-                .filter(RefreshToken.jti == jti)
-                .first()
+                db.query(RefreshToken).filter(RefreshToken.jti == jti).first()
             )
             if db_token:
                 # Refresh Token 폐기
                 db_token.is_revoked = True
                 db.commit()
-    return {"message": "로그아웃 되었습니다.""클라이언트 쪽에서 토큰을 삭제해주세요."}
+            return {"message": "로그아웃 되었습니다. 클라이언트 쪽에서 토큰을 삭제해주세요."}
+

@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI
 from app.routers import auth
 
@@ -10,7 +11,7 @@ app = FastAPI(
 # 인증 및 사용자 라우터 등록
 app.include_router(auth.router)
 
-# 추후 추가될 라우터 예시 (자료 관리, 대화 관리 등)
+# 추후 추가될 라우터 예시
 # from app.routers import resources, messages
 # app.include_router(resources.router)
 # app.include_router(messages.router)
@@ -18,3 +19,15 @@ app.include_router(auth.router)
 @app.get("/")
 def root():
     return {"message": "Chaj Backend Server is running successfully!"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True
+    )
+
