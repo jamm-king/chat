@@ -8,6 +8,15 @@
     --line: #eee8f7;
     --card: rgba(255, 255, 255, 0.72);
 }
+:root[data-theme="dark"]{
+    --bg: #09060f;
+    --text: #efe9ff;
+    --muted: #b8a9d8;
+    --accent: #c45cff;
+    --accent-soft: rgba(196, 92, 255, 0.25);
+    --line: rgba(190,80,255,0.3);
+    --card: rgba(14,8 ,26, 0.82);
+}
 
 body{
     margin: 0;
