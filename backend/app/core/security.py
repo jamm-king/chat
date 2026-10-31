@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from jose import jwt, JWTError
-from passlib.context import CryptContext
+from pwdlib import PasswordHash
 
 
 # .env 파일에서 환경 변수 로드
@@ -27,28 +27,18 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 # Refresh Token 만료 시간
 REFRESH_TOKEN_EXPIRE_DAYS = 1
 
-
 # 비밀번호 암호화
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto"
-)
+password_hash = PasswordHash.recommended()
 
 # 비밀번호 관련
-def hash_password(password: str) -> str:
-    """비밀번호를 bcrypt로 해시화"""
-    return pwd_context.hash(password)
+def hash_password(password: str):
+    """비밀번호 해시화"""
+    return password_hash.hash(password)
 
 
-def verify_password(
-    plain_password: str,
-    hashed_password: str
-) -> bool:
+def verify_password(plain_password: str, hashed_password: str):
     """입력한 비밀번호와 해시 비밀번호 비교"""
-    return pwd_context.verify(
-        plain_password,
-        hashed_password
-    )
+    return password_hash.verify(plain_password, hashed_password)
 
 
 # Access Token

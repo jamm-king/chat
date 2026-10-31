@@ -1,4 +1,7 @@
 from pydantic import BaseModel, EmailStr
+from fastapi.security import HTTPBearer
+
+oauth2_scheme = HTTPBearer()
 
 # 회원가입 요청
 class UserCreate(BaseModel):
