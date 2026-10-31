@@ -1,12 +1,16 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from uuid import uuid4
+
 from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
     status
 )
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+
 from app.db.session import get_db
 from app.models.users import User
 from app.models.refreshtoken import RefreshToken
@@ -25,13 +29,19 @@ from app.core.security import (
     verify_token,
     REFRESH_TOKEN_EXPIRE_DAYS
 )
-from datetime import timedelta
-from uuid import uuid4
+
 
 # Router
-router = APIRouter(prefix="/api/v1", tags=["Auth"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["Auth"]
+)
+
 # OAuth2
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/api/v1/auth/login"
+)
+
 
 # 에러 응답 생성
 def error_response(
@@ -52,18 +62,26 @@ def error_response(
 
 
 # 1. 회원가입
-@router.post("/auth/signup",
+@router.post(
+    "/auth/signup",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED
 )
-def signup(user_data: UserCreate,db: Session = Depends(get_db)):
+def signup(
+    user_data: UserCreate,
+    db: Session = Depends(get_db)
+):
     # 이메일 중복 확인
     existing_user = (
-        db.query(User).filter(User.email == user_data.email).first())
+        db.query(User)
+        .filter(User.email == user_data.email)
+        .first()
+    )
+
     if existing_user:
-        raise HTTPException(
+        return JSONResponse(
             status_code=400,
-            detail=error_response(
+            content=error_response(
                 code="AUTH_EMAIL_ALREADY_EXISTS",
                 message="이미 등록된 이메일입니다.",
                 retryable=False
@@ -75,15 +93,19 @@ def signup(user_data: UserCreate,db: Session = Depends(get_db)):
         email=user_data.email,
         password_hash=hash_password(
             user_data.password
-        ))
+        )
+    )
+
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
     return new_user
 
 
 # 2. 로그인
-@router.post("/auth/login",
+@router.post(
+    "/auth/login",
     response_model=TokenResponse
 )
 def login(
@@ -91,7 +113,10 @@ def login(
     db: Session = Depends(get_db)
 ):
     # 사용자 조회
-    user = (db.query(User).filter(User.email == user_data.email).first()
+    user = (
+        db.query(User)
+        .filter(User.email == user_data.email)
+        .first()
     )
 
     # 사용자 존재 여부 + 비밀번호 확인
@@ -99,9 +124,9 @@ def login(
         user_data.password,
         user.password_hash
     ):
-        raise HTTPException(
+        return JSONResponse(
             status_code=400,
-            detail=error_response(
+            content=error_response(
                 code="AUTH_INVALID_CREDENTIALS",
                 message="이메일 또는 비밀번호가 올바르지 않습니다.",
                 retryable=False
@@ -110,11 +135,13 @@ def login(
 
     # Access Token 생성
     access_token = create_access_token(
-        data={"sub": user.email})
+        data={"sub": user.email}
+    )
 
     # Refresh Token 생성
     refresh_token_value, jti = create_refresh_token(
-        data={"sub": user.email})
+        data={"sub": user.email}
+    )
 
     # Refresh Token DB 저장
     db_token = RefreshToken(
@@ -122,7 +149,10 @@ def login(
         jti=jti,
         expires_at=(
             datetime.now(timezone.utc)
-            + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)))
+            + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        )
+    )
+
     db.add(db_token)
     db.commit()
 
@@ -135,7 +165,8 @@ def login(
 
 
 # 3. Refresh Token Rotation
-@router.post("/auth/refresh",
+@router.post(
+    "/auth/refresh",
     response_model=TokenResponse
 )
 def refresh_access_token(
@@ -144,10 +175,11 @@ def refresh_access_token(
 ):
     # 1. Refresh Token JWT 검증
     payload = verify_token(body.refresh_token)
+
     if not payload:
-        raise HTTPException(
+        return JSONResponse(
             status_code=401,
-            detail=error_response(
+            content=error_response(
                 code="AUTH_INVALID_REFRESH_TOKEN",
                 message="유효하지 않거나 만료된 리프레시 토큰입니다.",
                 retryable=False
@@ -156,9 +188,9 @@ def refresh_access_token(
 
     # 2. 토큰 타입 확인
     if payload.get("type") != "refresh":
-        raise HTTPException(
+        return JSONResponse(
             status_code=401,
-            detail=error_response(
+            content=error_response(
                 code="AUTH_INVALID_TOKEN_TYPE",
                 message="Refresh Token이 아닙니다.",
                 retryable=False
@@ -170,9 +202,9 @@ def refresh_access_token(
     email = payload.get("sub")
 
     if not jti or not email:
-        raise HTTPException(
+        return JSONResponse(
             status_code=401,
-            detail=error_response(
+            content=error_response(
                 code="AUTH_INVALID_REFRESH_TOKEN",
                 message="잘못된 리프레시 토큰입니다.",
                 retryable=False
@@ -188,9 +220,9 @@ def refresh_access_token(
 
     # 5. DB 토큰 검증
     if not db_token:
-        raise HTTPException(
+        return JSONResponse(
             status_code=401,
-            detail=error_response(
+            content=error_response(
                 code="AUTH_REFRESH_TOKEN_NOT_FOUND",
                 message="등록되지 않은 리프레시 토큰입니다.",
                 retryable=False
@@ -199,9 +231,9 @@ def refresh_access_token(
 
     # 이미 사용된 Refresh Token인지 확인
     if db_token.is_revoked:
-        raise HTTPException(
+        return JSONResponse(
             status_code=401,
-            detail=error_response(
+            content=error_response(
                 code="AUTH_REFRESH_TOKEN_REVOKED",
                 message="이미 폐기된 리프레시 토큰입니다.",
                 retryable=False
@@ -210,10 +242,11 @@ def refresh_access_token(
 
     # DB 기준 만료 여부 확인
     now = datetime.now(timezone.utc)
+
     if db_token.expires_at < now:
-        raise HTTPException(
+        return JSONResponse(
             status_code=401,
-            detail=error_response(
+            content=error_response(
                 code="AUTH_REFRESH_TOKEN_EXPIRED",
                 message="만료된 리프레시 토큰입니다.",
                 retryable=False
@@ -221,12 +254,16 @@ def refresh_access_token(
         )
 
     # 6. 사용자 조회
-    user = (db.query(User).filter(User.email == email).first())
+    user = (
+        db.query(User)
+        .filter(User.email == email)
+        .first()
+    )
 
     if not user:
-        raise HTTPException(
+        return JSONResponse(
             status_code=404,
-            detail=error_response(
+            content=error_response(
                 code="USER_NOT_FOUND",
                 message="사용자를 찾을 수 없습니다.",
                 retryable=False
@@ -235,9 +272,9 @@ def refresh_access_token(
 
     # 7. Refresh Token의 사용자와 실제 사용자 확인
     if db_token.user_id != user.id:
-        raise HTTPException(
+        return JSONResponse(
             status_code=401,
-            detail=error_response(
+            content=error_response(
                 code="AUTH_TOKEN_USER_MISMATCH",
                 message="토큰 사용자 정보가 일치하지 않습니다.",
                 retryable=False
@@ -249,11 +286,13 @@ def refresh_access_token(
 
     # 9. 새로운 Access Token 생성
     new_access_token = create_access_token(
-        data={"sub": user.email})
+        data={"sub": user.email}
+    )
 
     # 10. 새로운 Refresh Token 생성
-    new_refresh_token_value, new_jti = (
-        create_refresh_token(data={"sub": user.email}))
+    new_refresh_token_value, new_jti = create_refresh_token(
+        data={"sub": user.email}
+    )
 
     # 11. 새로운 Refresh Token DB 저장
     new_db_token = RefreshToken(
@@ -262,7 +301,9 @@ def refresh_access_token(
         expires_at=(
             datetime.now(timezone.utc)
             + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-        ))
+        )
+    )
+
     db.add(new_db_token)
     db.commit()
 
@@ -274,7 +315,8 @@ def refresh_access_token(
 
 
 # 4. 현재 로그인 사용자 조회
-@router.get("/users/me",
+@router.get(
+    "/users/me",
     response_model=UserResponse
 )
 def get_current_user(
@@ -285,9 +327,9 @@ def get_current_user(
     payload = verify_token(token)
 
     if not payload:
-        raise HTTPException(
+        return JSONResponse(
             status_code=401,
-            detail=error_response(
+            content=error_response(
                 code="AUTH_INVALID_ACCESS_TOKEN",
                 message="유효하지 않은 액세스 토큰입니다.",
                 retryable=False
@@ -296,9 +338,9 @@ def get_current_user(
 
     # Access Token인지 확인
     if payload.get("type") != "access":
-        raise HTTPException(
+        return JSONResponse(
             status_code=401,
-            detail=error_response(
+            content=error_response(
                 code="AUTH_INVALID_TOKEN_TYPE",
                 message="Access Token이 아닙니다.",
                 retryable=False
@@ -309,9 +351,9 @@ def get_current_user(
     email = payload.get("sub")
 
     if not email:
-        raise HTTPException(
+        return JSONResponse(
             status_code=401,
-            detail=error_response(
+            content=error_response(
                 code="AUTH_TOKEN_USER_MISSING",
                 message="토큰에 사용자 정보가 없습니다.",
                 retryable=False
@@ -326,14 +368,15 @@ def get_current_user(
     )
 
     if not user:
-        raise HTTPException(
+        return JSONResponse(
             status_code=401,
-            detail=error_response(
+            content=error_response(
                 code="USER_NOT_FOUND",
                 message="사용자를 찾을 수 없습니다.",
                 retryable=False
             )
         )
+
     return user
 
 
@@ -363,4 +406,6 @@ def logout(
                 db_token.is_revoked = True
                 db.commit()
 
-    return {"message": "로그아웃 되었습니다. 클라이언트 쪽에서 토큰을 삭제해주세요."}
+    return {
+        "message": "로그아웃 되었습니다. 클라이언트 쪽에서 토큰을 삭제해주세요."
+    }
