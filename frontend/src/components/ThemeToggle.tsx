@@ -1,13 +1,16 @@
 import { useState } from 'react'
+import { applyTheme, saveTheme } from "../lib/theme";
 
 export default function ThemeToggle () {
     //야간모드 전환 단추//
-    const [dark, setDark] = useState(false);
+    const [dark, setDark] = useState(document.documentElement.dataset.theme === "dark");
 
     const toggle = ()=>{
         const next = !dark;
+        const theme = next ? "dark":"light"
         setDark(next);
-        document.documentElement.dataset.theme = next ? "dark":"light"
+        applyTheme(theme);
+        saveTheme(theme);
     }
   return (
     <button type="button" onClick={toggle}>
