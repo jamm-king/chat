@@ -1,7 +1,7 @@
 
 from fastapi import FastAPI
 from app.core.errors import register_exception_handlers
-from app.routers import auth
+from app.routers import auth, messages
 
 app = FastAPI(
     title="Chat AI RAG Service API",
@@ -15,10 +15,12 @@ register_exception_handlers(app)
 # 인증 및 사용자 라우터 등록
 app.include_router(auth.router)
 
+# 대화(메시지) 라우터 등록
+app.include_router(messages.router)
+
 # 추후 추가될 라우터 예시
-# from app.routers import resources, messages
+# from app.routers import resources
 # app.include_router(resources.router)
-# app.include_router(messages.router)
 
 @app.get("/")
 def root():
