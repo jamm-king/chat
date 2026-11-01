@@ -78,3 +78,8 @@
 .auth-link a {
   color: var(--accent);
 }
+.auth-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 14px;
+}

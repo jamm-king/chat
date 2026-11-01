@@ -8,6 +8,7 @@
     --line: #eee8f7;
     --card: rgba(255, 255, 255, 0.72);
     --on-accent: #ffffff;
+    --danger: #c62828;
 }
 :root[data-theme="dark"]{
     --bg: #09060f;
@@ -18,6 +19,7 @@
     --line: rgba(190,80,255,0.3);
     --card: rgba(14,8 ,26, 0.82);
     --on-accent: #12051f;
+    --danger: #ff8a80;
 }
 
 body{
