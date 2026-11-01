@@ -1,6 +1,5 @@
 
 from datetime import datetime, timezone, timedelta
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
@@ -29,6 +28,7 @@ from app.core.security import (
     verify_token,
     REFRESH_TOKEN_EXPIRE_DAYS
 )
+from app.core.errors import error_response
 
 
 # Router
@@ -40,24 +40,6 @@ router = APIRouter(
 
 # HTTP Bearer 인증
 bearer_scheme = HTTPBearer(auto_error=False)
-
-
-# 에러 응답 생성
-def error_response(
-    code: str,
-    message: str,
-    retryable: bool = False,
-    details: list | None = None
-):
-    return {
-        "error": {
-            "code": code,
-            "message": message,
-            "retryable": retryable,
-            "details": details or []
-        },
-        "requestId": str(uuid4())
-    }
 
 
 # DB 시간 비교용 함수
