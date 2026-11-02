@@ -42,21 +42,30 @@ For an AI-only browser test, use
 `http://localhost:8001/integrations/notion/callback` instead.
 
 Requests and responses use JSON where applicable. IDs are UUIDs and timestamp
-fields are ISO 8601 date-time strings. Query names are case-sensitive:
-`userId` is camelCase; response fields are snake_case. Every successful endpoint
+fields are ISO 8601 date-time strings. Request field names are case-sensitive:
+`userId` is camelCase (JSON body for authorization start, query for connection
+listing); response fields are snake_case. Every successful endpoint
 below returns `Cache-Control: no-store`.
 
 ## 1. Start authorization
 
 ```http
-GET /integrations/notion/authorize?userId=11111111-1111-4111-8111-111111111111
+POST /integrations/notion/authorize
 Authorization: Bearer <AI_SERVICE_TOKEN>
+Content-Type: application/json
+
+{"userId": "11111111-1111-4111-8111-111111111111"}
 ```
 
 | Input | Location | Required | Rule |
 | --- | --- | --- | --- |
 | Service token | Authorization header | Yes | Configured `AI_SERVICE_TOKEN`. |
-| `userId` | Query | Yes | User UUID derived from Backend's authenticated session. |
+| `userId` | JSON body | Yes | User UUID derived from Backend's authenticated session. |
+
+The body is required; a query-only `userId` is insufficient. Null, malformed UUIDs,
+and unknown body fields are rejected with 422. Authorization start creates pending
+state and a browser cookie, so it uses POST. Previous GET clients must migrate:
+`GET /integrations/notion/authorize` now returns 405 without creating state.
 
 Success: `200 OK`.
 
@@ -160,16 +169,17 @@ GET /integrations/notion/connections?userId=11111111-1111-4111-8111-111111111111
 Authorization: Bearer <AI_SERVICE_TOKEN>
 ```
 
-Required inputs are the same as authorization start. Success is `200 OK` with an
-array of the connection objects above, or `[]` if none exist. There is no
+The service bearer token and query parameter `userId` are required; this GET does
+not accept the authorization-start JSON body as a replacement. Success is
+`200 OK` with an array of the connection objects above, or `[]` if none exist. There is no
 pagination or guaranteed ordering. This reads saved connections without calling
 Notion. Backend can use it to reconcile connection state after browser completion.
 
 ## Backend cookie relay
 
 ```text
-Browser -> Backend: Start connection using the Chat login session
-Backend -> AI: GET /authorize?userId=... with service bearer token
+Browser -> Backend: POST to Backend's connection-start route using the Chat login session
+Backend -> AI: POST /integrations/notion/authorize with JSON userId and service bearer token
 AI -> Backend: authorization_url + Set-Cookie
 Backend -> Browser: authorization_url + each Set-Cookie header
 Browser -> Notion: Navigate to authorization_url and grant access
@@ -180,6 +190,11 @@ AI -> Notion: Exchange code for credentials
 AI -> AI database: Save encrypted credentials linked to user_id
 AI -> Backend -> Browser: Connection result + cookie deletion header
 ```
+
+Backend owns the frontend-facing start route and derives `userId` from its login
+session, not from an untrusted frontend-supplied ID. Its start route uses POST;
+the exact frontend-facing path is defined by Backend. The Notion authorization
+page navigation and browser callback still use GET.
 
 Backend must forward each `Set-Cookie` as a separate response header; do not
 comma-join them. For an HTTPX response and a FastAPI/Starlette browser response,
@@ -216,7 +231,8 @@ code for OAuth exchange failures.
 | Endpoint | HTTP | Meaning |
 | --- | --- | --- |
 | Start / list | 401 | Missing or incorrect service token; `WWW-Authenticate: Bearer`. |
-| Any | 422 | Missing or invalid required query input. |
+| Any | 422 | Missing or invalid required input; authorization start validates its JSON body, other endpoints validate query inputs. |
+| Start | 405 | GET is no longer supported; use POST with JSON userId. |
 | Callback | 400 | Unknown, expired, reused, or browser-mismatched state. |
 | Callback | 400 | Authorization denied/cancelled, or no authorization code. |
 | Callback | 502 | Token exchange failed or the provider response was invalid. |
@@ -284,7 +300,8 @@ python -m pytest -q
 Tests use mocked Notion HTTP responses and in-memory SQLite; they do not prove
 live Notion or PostgreSQL integration. For a manual integration check:
 
-1. Start authorization through Backend using a logged-in Chat session.
+1. Start authorization with POST through Backend using a logged-in Chat session.
+   Confirm Backend sends AI a JSON body containing the session-derived `userId`.
 2. Confirm the browser has the HttpOnly OAuth cookie at the callback path.
 3. Open the returned URL in the same browser and authorize selected Notion pages.
 4. Confirm the callback returns connection metadata without tokens and deletes
