@@ -1,5 +1,9 @@
 # AI Service API Reference
 
+> Implementation status: This page describes the proposed RAG APIs, not the
+> currently implemented OAuth endpoints. Backend developers integrating Notion
+> OAuth should use the [Notion OAuth integration contract](notion-oauth.md).
+
 v1 · 구현 전 제안 명세 · 2026-10-29
 
 Backend가 AI 서비스를 호출하기 위한 문서다. 필드 타입·필수 여부·응답 스키마는 [openapi.json](openapi.json)에 정의한다. 이 문서는 호출 흐름과 스키마로 표현하기 어려운 정책을 설명한다. 기존 [MOM](../../../docs/mom/2026-10-26.md)의 내부 API 5개를 구체화했다.
