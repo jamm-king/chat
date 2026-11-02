@@ -31,6 +31,7 @@ def request(
     path: str,
     *,
     params: Optional[Dict[str, Any]] = None,
+    json: Optional[Dict[str, Any]] = None,
     cookies: Optional[Dict[str, str]] = None,
     with_service_token: bool = True,
 ) -> httpx.Response:
@@ -48,6 +49,6 @@ def request(
             timeout=AI_TIMEOUT_SECONDS,
             follow_redirects=False,
         ) as client:
-            return client.request(method, path, params=params, headers=headers)
+            return client.request(method, path, params=params, json=json, headers=headers)
     except httpx.HTTPError as exc:
         raise AiServiceUnavailable() from exc

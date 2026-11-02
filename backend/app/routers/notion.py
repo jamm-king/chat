@@ -94,13 +94,14 @@ def _relay_set_cookies(upstream: httpx.Response, response) -> bool:
 
 
 # 1. 노션 연결 시작 (권한 허용 주소 발급)
-# 호출할 때마다 새 OAuth state 와 쿠키가 발급되므로 POST 로 받는다. (AI 호출은 계약대로 GET)
+# 호출할 때마다 새 OAuth state 와 쿠키가 발급되므로 POST 로 받는다.
+# AI 호출도 POST 이며 userId 는 JSON 본문으로 보낸다. (쿼리로 보내면 AI 가 422/405 응답)
 @api_router.post("/authorize", response_model=NotionAuthorizeResponse)
 def authorize_notion(current_user: User = Depends(get_current_user)):
     upstream = _call_ai(
-        "GET",
+        "POST",
         "/integrations/notion/authorize",
-        params={"userId": current_user.id},
+        json={"userId": current_user.id},
     )
     if upstream.status_code != 200:
         _raise_ai_error(upstream)
