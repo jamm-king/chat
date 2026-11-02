@@ -25,7 +25,7 @@ from app.notion_auth import (
     decrypt_token, encrypt_token, exchange_code,
 )
 from app.schemas import (
-    AuthorizationResponse, ConnectionResponse, NotionPageListResponse, NotionPageResponse,
+    AuthorizationRequest, AuthorizationResponse, ConnectionResponse, NotionPageListResponse, NotionPageResponse,
     NotionResourceResponse, NotionResourceSummary, RegisterNotionResourceRequest,
 )
 
@@ -178,11 +178,11 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
             raise HTTPException(503, "Resource storage is unavailable") from None
         return JSONResponse(output.model_dump(mode="json"), headers={"Cache-Control": "no-store"})
 
-    @app.get("/integrations/notion/authorize", response_model=AuthorizationResponse,
+    @app.post("/integrations/notion/authorize", response_model=AuthorizationResponse,
              dependencies=[Depends(require_service_token)])
-    def authorize_notion(request: Request, user_id: Annotated[UUID, Query(alias="userId")]):
+    def authorize_notion(request: Request, body: AuthorizationRequest):
         config = request.app.state.settings
-        url, browser_token = create_authorization_url(config, request.app.state.oauth_states, str(user_id))
+        url, browser_token = create_authorization_url(config, request.app.state.oauth_states, str(body.user_id))
         response = JSONResponse({"authorization_url": url}, headers={"Cache-Control": "no-store"})
         response.set_cookie(
             COOKIE_NAME, browser_token, max_age=config.oauth_state_ttl_seconds,
