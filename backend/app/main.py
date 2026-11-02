@@ -1,5 +1,6 @@
 
 from fastapi import FastAPI
+from app.core.errors import register_exception_handlers
 from app.routers import auth
 
 app = FastAPI(
@@ -7,6 +8,9 @@ app = FastAPI(
     version="1.0",
     description="찿(Chat) 서비스 MVP 백엔드 API 서버"
 )
+
+# 공통 에러 응답 형식 적용
+register_exception_handlers(app)
 
 # 인증 및 사용자 라우터 등록
 app.include_router(auth.router)
