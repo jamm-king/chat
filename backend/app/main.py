@@ -1,7 +1,7 @@
 
 from fastapi import FastAPI
 from app.core.errors import register_exception_handlers
-from app.routers import auth, messages
+from app.routers import auth, messages, notion
 
 app = FastAPI(
     title="Chat AI RAG Service API",
@@ -17,6 +17,10 @@ app.include_router(auth.router)
 
 # 대화(메시지) 라우터 등록
 app.include_router(messages.router)
+
+# 노션 OAuth 연동 라우터 등록 (AI 서비스 중계)
+app.include_router(notion.api_router)
+app.include_router(notion.callback_router)
 
 # 추후 추가될 라우터 예시
 # from app.routers import resources

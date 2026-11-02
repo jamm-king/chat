@@ -301,13 +301,15 @@ Frontend는 `READY` 또는 `FAILED`가 될 때까지 `GET /api/v1/resources/{res
 
 | Method | Endpoint | 설명 | 인증 필요 |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/integrations/notion/authorize` | 노션 권한 허용 화면 주소 발급 | Yes |
+| `POST` | `/api/v1/integrations/notion/authorize` | 노션 권한 허용 화면 주소 발급 | Yes |
 | `GET` | `/api/v1/integrations/notion/connections` | 현재 사용자의 노션 연결 상태 조회 | Yes |
 | `GET` | `/integrations/notion/callback` | 노션 허용 후 브라우저가 돌아오는 Backend 주소. RAG 시스템에 전달한 뒤 Frontend 화면으로 이동 (Frontend가 직접 호출하지 않음) | No |
 
 ### 3.2.1 권한 허용 주소 발급
 
-**`GET /api/v1/integrations/notion/authorize`**
+**`POST /api/v1/integrations/notion/authorize`**
+
+Request Body: 없음
 
 Response `200 OK`:
 
@@ -643,7 +645,7 @@ Frontend에서 Access Token / Refresh Token 삭제
 ```text
 GET /api/v1/integrations/notion/connections
   ↓
-연결 없음 → GET /api/v1/integrations/notion/authorize
+연결 없음 → POST /api/v1/integrations/notion/authorize
   ↓
 authorizationUrl로 이동 → 노션 화면에서 페이지 체크 후 허용
   ↓
@@ -683,7 +685,7 @@ Frontend
 ### v2.1
 
 - 자료 등록을 공개 노션 URL 방식에서 노션 연결(OAuth) 후 페이지 URL 등록 방식으로 변경
-- 노션 연결 API 추가: `GET /api/v1/integrations/notion/authorize`, `GET /api/v1/integrations/notion/connections`
+- 노션 연결 API 추가: `POST /api/v1/integrations/notion/authorize`, `GET /api/v1/integrations/notion/connections`
 - 노션 콜백 중계와 연결 후 돌아오는 Frontend 화면 규칙 추가
 - 자료 등록 요청을 `source.type: NOTION_PAGE`로 변경하고 응답·오류 예시 추가
 - 자료 목록·상세·삭제 응답 형식 추가
