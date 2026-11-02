@@ -1,8 +1,8 @@
-# 찾(Chat) 서비스 — 프론트엔드 연동 API 레퍼런스 (MVP v2.0)
+# 찾(Chat) 서비스 — 프론트엔드 연동 API 레퍼런스 (MVP v2.1)
 
 ## 1. 개요
 
-본 문서는 프론트엔드 개발팀이 현재 백엔드 API와 연동하기 위한 MVP v2.0 가이드입니다.
+본 문서는 프론트엔드 개발팀이 현재 백엔드 API와 연동하기 위한 MVP v2.1 가이드입니다.
 
 - **통신 규격**: `application/json`
 - **인증 방식**: JWT Bearer 토큰 (`Authorization: Bearer <access_token>`)
