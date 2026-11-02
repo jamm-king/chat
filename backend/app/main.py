@@ -1,12 +1,12 @@
 
 from fastapi import FastAPI
 from app.core.errors import register_exception_handlers
-from app.routers import auth
+from app.routers import auth, messages
 
 app = FastAPI(
     title="Chat AI RAG Service API",
     version="1.0",
-    description="찿(Chat) 서비스 MVP 백엔드 API 서버"
+    description="찾(Chat) 서비스 MVP 백엔드 API 서버"
 )
 
 # 공통 에러 응답 형식 적용
@@ -15,14 +15,16 @@ register_exception_handlers(app)
 # 인증 및 사용자 라우터 등록
 app.include_router(auth.router)
 
+# 대화(메시지) 라우터 등록
+app.include_router(messages.router)
+
 # 추후 추가될 라우터 예시
-# from app.routers import resources, messages
+# from app.routers import resources
 # app.include_router(resources.router)
-# app.include_router(messages.router)
 
 @app.get("/")
 def root():
-    return {"message": "Chaj Backend Server is running successfully!"}
+    return {"message": "Chat Backend Server is running successfully!"}
 
 
 if __name__ == "__main__":
