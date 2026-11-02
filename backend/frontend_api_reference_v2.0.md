@@ -1,8 +1,8 @@
-# 찾(Chat) 서비스 — 프론트엔드 연동 API 레퍼런스 (MVP v2.0)
+# 찾(Chat) 서비스 — 프론트엔드 연동 API 레퍼런스 (MVP v2.1)
 
 ## 1. 개요
 
-본 문서는 프론트엔드 개발팀이 현재 백엔드 API와 연동하기 위한 MVP v2.0 가이드입니다.
+본 문서는 프론트엔드 개발팀이 현재 백엔드 API와 연동하기 위한 MVP v2.1 가이드입니다.
 
 - **통신 규격**: `application/json`
 - **인증 방식**: JWT Bearer 토큰 (`Authorization: Bearer <access_token>`)
@@ -155,11 +155,13 @@ Request Body:
 
 **Chunk 데이터 자체는 Backend에서 관리하지 않으며, RAG 시스템에서 관리합니다.**
 
+자료를 등록하려면 먼저 노션 연결([3.2])을 마쳐야 합니다. 연결 후 사용자가 노션 페이지 URL을 하나씩 입력해 등록합니다.
+
 ### [3.1] Resource API
 
 | Method | Endpoint | 설명 | 인증 필요 |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/resources` | 공개 노션 URL 등록 및 비동기 처리 시작 | Yes |
+| `POST` | `/api/v1/resources` | 연결된 노션 페이지 URL 등록 및 비동기 처리 시작 | Yes |
 | `GET` | `/api/v1/resources` | 현재 사용자가 등록한 자료 목록 조회 | Yes |
 | `GET` | `/api/v1/resources/{resourceId}` | 특정 자료 상세 정보 및 처리 상태 조회 | Yes |
 | `DELETE` | `/api/v1/resources/{resourceId}` | 자료 삭제 및 RAG 시스템에 관련 데이터 삭제 요청 | Yes |
@@ -172,13 +174,114 @@ Request Body:
 
 ```json
 {
-  "title": "프로젝트 참고 문서",
   "source": {
-    "type": "URL",
-    "url": "https://example.notion.site/reference-page"
+    "type": "NOTION_PAGE",
+    "url": "https://www.notion.so/workspace/Project-Notes-0123456789abcdef0123456789abcdef"
   }
 }
 ```
+
+- `source.type`: `NOTION_PAGE`만 지원합니다.
+- `source.url`: 노션 연결 때 사용자가 체크한 페이지 또는 그 하위 페이지의 주소입니다. 한 번에 하나만 등록합니다.
+- Backend는 URL에서 노션 페이지 ID(32자리)를 추출하고, 사용자의 노션 연결 중 그 페이지를 읽을 수 있는 연결로 RAG 시스템에 등록을 요청합니다.
+- 제목은 노션 페이지 제목을 사용하므로 요청에 포함하지 않습니다.
+
+Response `202 Accepted`:
+
+```json
+{
+  "resourceId": "33333333-3333-4333-8333-333333333333",
+  "title": null,
+  "source": {
+    "type": "NOTION_PAGE",
+    "url": "https://www.notion.so/workspace/Project-Notes-0123456789abcdef0123456789abcdef"
+  },
+  "status": "REGISTERED",
+  "error": null,
+  "createdAt": "2026-11-02T10:00:00",
+  "updatedAt": "2026-11-02T10:00:00"
+}
+```
+
+- `title`: 본문 추출 전에는 `null`이며, 추출 후 노션 페이지 제목으로 채워집니다.
+- `error`: `FAILED`일 때만 `code`, `message`를 포함하고 그 외에는 `null`입니다.
+
+Error Response:
+
+| Status | Code | 설명 | retryable |
+| :--- | :--- | :--- | :--- |
+| `409` | `NOTION_NOT_CONNECTED` | 노션 연결이 없음. [3.2] 노션 연결 후 다시 시도 | `false` |
+| `403` | `NOTION_PAGE_NOT_SHARED` | 노션 연결 때 체크하지 않은 페이지. 다시 연결해서 해당 페이지를 체크해야 함 | `false` |
+| `409` | `RESOURCE_ALREADY_EXISTS` | 이미 등록한 노션 페이지 | `false` |
+| `422` | `VALIDATION_ERROR` | 노션 페이지 주소가 아니거나 페이지 ID를 찾을 수 없음 | `false` |
+| `502` | `RAG_SERVICE_UNAVAILABLE` | RAG 시스템 등록 요청 실패 | `true` |
+
+### 3.1.2 자료 목록 조회 요청
+
+**`GET /api/v1/resources`**
+
+현재 사용자가 등록한 자료를 최근 등록 순으로 반환합니다.
+
+Response `200 OK`:
+
+```json
+{
+  "resources": [
+    {
+      "resourceId": "33333333-3333-4333-8333-333333333333",
+      "title": "프로젝트 참고 문서",
+      "source": {
+        "type": "NOTION_PAGE",
+        "url": "https://www.notion.so/workspace/Project-Notes-0123456789abcdef0123456789abcdef"
+      },
+      "status": "READY",
+      "error": null,
+      "createdAt": "2026-11-02T10:00:00",
+      "updatedAt": "2026-11-02T10:01:00"
+    }
+  ]
+}
+```
+
+### 3.1.3 자료 상세 조회 요청
+
+**`GET /api/v1/resources/{resourceId}`**
+
+Response `200 OK`: 3.1.2 목록의 항목 하나와 같은 형식입니다.
+
+처리에 실패한 경우:
+
+```json
+{
+  "resourceId": "33333333-3333-4333-8333-333333333333",
+  "title": null,
+  "source": {
+    "type": "NOTION_PAGE",
+    "url": "https://www.notion.so/workspace/Project-Notes-0123456789abcdef0123456789abcdef"
+  },
+  "status": "FAILED",
+  "error": {
+    "code": "EMPTY_CONTENT",
+    "message": "색인할 본문이 없습니다."
+  },
+  "createdAt": "2026-11-02T10:00:00",
+  "updatedAt": "2026-11-02T10:00:30"
+}
+```
+
+Error Response:
+
+| Status | Code | 설명 | retryable |
+| :--- | :--- | :--- | :--- |
+| `404` | `RESOURCE_NOT_FOUND` | 존재하지 않거나 다른 사용자의 자료 | `false` |
+
+### 3.1.4 자료 삭제 요청
+
+**`DELETE /api/v1/resources/{resourceId}`**
+
+Response `204 No Content` (응답 본문 없음)
+
+Error Response는 3.1.3과 같습니다.
 
 ### Resource Status
 
@@ -188,19 +291,21 @@ Request Body:
 - `READY`: 검색 및 RAG 답변 생성 가능
 - `FAILED`: 처리 실패
 
+Frontend는 `READY` 또는 `FAILED`가 될 때까지 `GET /api/v1/resources/{resourceId}`로 상태를 다시 조회합니다.
+
 > Resource는 Backend에서 관리하지만, Resource를 기반으로 생성되는 Chunk 및 Vector 데이터의 저장·검색은 RAG 시스템의 책임입니다.
 
-### [3.2] 노션 연동 (Notion OAuth)
+### [3.2] 노션 연결 (Notion Integration)
 
-사용자의 노션 워크스페이스를 연결합니다. OAuth 처리와 노션 토큰 저장은 AI 서비스가 맡고, Backend는 로그인 사용자 확인과 AI 서비스 중계만 합니다. 노션 토큰은 Frontend로 전달되지 않습니다. (AI 연동 계약: `ai/docs/api/notion-oauth.md`)
+자료를 등록하기 전에 사용자의 노션 계정을 연결합니다. 사용자는 노션 화면에서 서비스가 읽을 페이지를 직접 체크하며, 체크한 페이지와 그 하위 페이지만 자료로 등록할 수 있습니다.
 
 | Method | Endpoint | 설명 | 인증 필요 |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/integrations/notion/authorize` | 노션 연결 시작, 노션 인증 URL 발급 | Yes |
-| `GET` | `/integrations/notion/callback` | 노션이 브라우저를 리다이렉트하는 콜백 (Frontend가 직접 호출하지 않음) | No |
-| `GET` | `/api/v1/integrations/notion/connections` | 현재 사용자의 노션 연결 목록 조회 | Yes |
+| `POST` | `/api/v1/integrations/notion/authorize` | 노션 권한 허용 화면 주소 발급 | Yes |
+| `GET` | `/api/v1/integrations/notion/connections` | 현재 사용자의 노션 연결 상태 조회 | Yes |
+| `GET` | `/integrations/notion/callback` | 노션 허용 후 브라우저가 돌아오는 Backend 주소. RAG 시스템에 전달한 뒤 Frontend 화면으로 이동 (Frontend가 직접 호출하지 않음) | No |
 
-### 3.2.1 노션 연결 시작
+### 3.2.1 권한 허용 주소 발급
 
 **`POST /api/v1/integrations/notion/authorize`**
 
@@ -210,36 +315,36 @@ Response `200 OK`:
 
 ```json
 {
-  "authorizationUrl": "https://api.notion.com/v1/oauth/authorize?client_id=...&state=..."
+  "authorizationUrl": "https://api.notion.com/v1/oauth/authorize?client_id=...&response_type=code&owner=user&redirect_uri=...&state=..."
 }
 ```
 
-- 응답에 `notion_oauth_browser` HttpOnly 쿠키가 함께 설정됩니다. Frontend JS에서 읽을 필요는 없으며 브라우저가 자동으로 저장합니다.
-- 응답을 받은 **같은 브라우저**에서 `authorizationUrl`로 이동해야 합니다. (`window.location.href = authorizationUrl`)
-- 쿠키 유효 시간은 10분이며, 한 브라우저에서 연결을 동시에 여러 번 시작하면 마지막 요청만 유효합니다.
-- `localhost`와 `127.0.0.1`을 섞어 쓰면 쿠키가 전달되지 않습니다. 개발 시 `localhost`로 통일합니다.
+- Frontend는 현재 창을 `authorizationUrl`로 이동합니다.
+- 사용자는 노션 화면에서 등록할 페이지를 체크하고 허용합니다.
+- 주소는 발급 후 10분 동안 한 번만 사용할 수 있습니다.
+- 응답에는 연결 확인용 쿠키(`notion_oauth_browser`, HttpOnly)가 함께 오며 브라우저가 자동으로 저장합니다. Frontend 코드에서 읽거나 저장하지 않습니다.
+- 다른 출처(origin)에서 호출할 때는 `fetch`에 `credentials: "include"`가 필요합니다. 개발 환경의 Vite 프록시(`/api`)를 쓰면 같은 출처라 필요 없습니다.
+- 권한 허용은 주소를 받은 같은 브라우저에서 진행하고, 한 브라우저에서 두 연결을 동시에 진행하지 않습니다.
+- 개발 환경에서는 `localhost`로 접속합니다. `127.0.0.1`과 섞으면 쿠키가 전달되지 않습니다.
 
-### 3.2.2 노션 콜백
+### 3.2.2 연결 후 돌아오는 Frontend 화면
 
-**`GET /integrations/notion/callback?state=...&code=...`**
+노션 화면에서 허용하거나 취소하면 브라우저는 Backend 콜백(`http://localhost:8000/integrations/notion/callback`)을 거쳐 아래 Frontend 주소로 이동합니다. (개발 환경 기준)
 
-노션 권한 허용(또는 취소) 후 브라우저가 이동하는 주소입니다. Backend가 처리 결과를 아래 방식으로 알려줍니다.
+```text
+http://localhost:5173/notion/callback?status=connected
+http://localhost:5173/notion/callback?status=failed&reason=denied
+```
 
-- `NOTION_CONNECT_RESULT_URL` 설정 시: 해당 Frontend 주소로 `303` 리다이렉트
-  - 성공: `?status=connected&connectionId=<uuid>`
-  - 실패: `?status=failed&code=<에러 코드>`
-- 미설정 시: 결과를 JSON으로 응답 (성공 시 3.2.3의 연결 객체 1개, 실패 시 공통 에러 형식)
+| reason | 뜻 |
+| :--- | :--- |
+| `denied` | 사용자가 노션 화면에서 취소함 |
+| `expired` | 권한 허용 주소의 유효 시간(10분)이 지났거나, 이미 사용했거나, 다른 브라우저에서 진행함 |
+| `failed` | 노션 토큰 발급 또는 저장 실패 |
 
-| 에러 코드 | HTTP | 의미 |
-| :--- | :--- | :--- |
-| `NOTION_AUTHORIZATION_FAILED` | 400 / 422 | 사용자가 취소했거나, 만료·재사용·다른 브라우저의 요청 |
-| `NOTION_TOKEN_EXCHANGE_FAILED` | 502 | 노션 토큰 교환 실패 |
-| `NOTION_CONNECTION_SAVE_FAILED` | 503 | 연결 정보 저장 실패 |
-| `AI_SERVICE_UNAVAILABLE` | 503 | AI 서비스 연결 불가 |
+> **구현 필요 (Backend):** RAG 시스템의 콜백은 결과를 JSON으로 응답합니다. Backend 콜백이 이 결과를 받아 위 Frontend 주소로 이동시키고, RAG 시스템이 보낸 쿠키 삭제 헤더도 브라우저에 전달합니다. 중계 방식은 `ai/docs/api/notion-oauth.md`를 따릅니다.
 
-실패 시 자동 재시도는 없으며, 3.2.1부터 다시 시작해야 합니다.
-
-### 3.2.3 노션 연결 목록 조회
+### 3.2.3 연결 상태 조회
 
 **`GET /api/v1/integrations/notion/connections`**
 
@@ -249,26 +354,18 @@ Response `200 OK`:
 {
   "connections": [
     {
-      "connectionId": "22222222-2222-4222-8222-222222222222",
-      "workspaceId": "33333333-3333-4333-8333-333333333333",
-      "workspaceName": "Example workspace",
-      "botId": "44444444-4444-4444-8444-444444444444",
-      "createdAt": "2026-11-02T01:00:00Z",
-      "status": "connected"
+      "connectionId": "66666666-6666-4666-8666-666666666666",
+      "workspaceName": "My Workspace",
+      "status": "CONNECTED",
+      "createdAt": "2026-11-02T10:00:00"
     }
   ]
 }
 ```
 
-- 연결이 없으면 `connections`는 빈 배열입니다.
-- `workspaceName`은 `null`일 수 있습니다.
-- 한 사용자가 여러 워크스페이스를 연결할 수 있습니다.
-- `status`는 고정값이며 노션 토큰의 실제 유효성을 확인한 값이 아닙니다.
-
-| 에러 코드 | HTTP | 의미 |
-| :--- | :--- | :--- |
-| `AI_SERVICE_UNAVAILABLE` | 503 | AI 서비스 연결 불가 |
-| `AI_SERVICE_ERROR` | 502 | AI 서비스 처리 오류 |
+- `connections`가 비어 있으면 연결 전입니다. Frontend는 `노션 연결` 단추를 표시합니다.
+- 한 사용자가 여러 노션 워크스페이스를 연결할 수 있습니다. 같은 워크스페이스를 다시 연결하면 기존 연결이 갱신됩니다.
+- `status`는 저장된 연결이라는 뜻이며, 노션 권한이 지금도 유효한지는 확인하지 않습니다.
 
 ---
 
@@ -433,9 +530,13 @@ Request Body:
 - Resource 처리 상태 관리
 - Message 및 대화 기록 관리
 - Frontend와 RAG 시스템 사이의 API 연동
+- 노션 연결 요청 중계 (권한 허용 주소 발급, 콜백 전달과 Frontend 화면 이동, 연결 상태 조회)
+- 노션 페이지 URL에서 페이지 ID를 추출해 RAG 시스템에 등록 요청
 
 ### RAG 시스템
 
+- 노션 연결(OAuth) 처리와 노션 토큰 암호화 보관
+- 노션 공식 API로 페이지 본문 수집
 - Resource 원문 기반 Chunk 생성
 - Chunk 저장 및 관리
 - Embedding 생성
@@ -448,7 +549,8 @@ Request Body:
 - 로그인 상태 및 토큰 관리
 - 인증이 필요한 API 요청 시 Access Token 전달
 - 로그인/로그아웃 UI 처리
-- Resource 등록 및 상태 표시
+- 노션 연결 단추와 연결 결과 화면 표시
+- 노션 페이지 URL 입력, Resource 등록 및 상태 표시
 - 대화 UI 표시
 - AI 답변 및 Citation 표시
 
@@ -489,6 +591,8 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsIn...
   "requestId": "77777777-7777-4777-8777-777777777777"
 }
 ```
+
+- RAG 시스템에서 받은 오류도 Backend가 이 형식으로 바꿔 전달합니다.
 
 ---
 
@@ -536,6 +640,26 @@ Frontend에서 Access Token / Refresh Token 삭제
 로그인 화면으로 이동
 ```
 
+### 노션 연결과 자료 등록
+
+```text
+GET /api/v1/integrations/notion/connections
+  ↓
+연결 없음 → POST /api/v1/integrations/notion/authorize
+  ↓
+authorizationUrl로 이동 → 노션 화면에서 페이지 체크 후 허용
+  ↓
+Backend 콜백(/integrations/notion/callback) → RAG 시스템에 전달
+  ↓
+/notion/callback?status=connected 로 돌아옴
+  ↓
+노션 페이지 URL 하나 입력
+  ↓
+POST /api/v1/resources
+  ↓
+GET /api/v1/resources/{resourceId} 로 READY 확인
+```
+
 ### RAG 자료 검색
 
 ```text
@@ -557,6 +681,15 @@ Frontend
 ---
 
 ## 10. 버전 변경 사항
+
+### v2.1
+
+- 자료 등록을 공개 노션 URL 방식에서 노션 연결(OAuth) 후 페이지 URL 등록 방식으로 변경
+- 노션 연결 API 추가: `POST /api/v1/integrations/notion/authorize`, `GET /api/v1/integrations/notion/connections`
+- 노션 콜백 중계와 연결 후 돌아오는 Frontend 화면 규칙 추가
+- 자료 등록 요청을 `source.type: NOTION_PAGE`로 변경하고 응답·오류 예시 추가
+- 자료 목록·상세·삭제 응답 형식 추가
+- 역할 구분, 공통 에러 응답, 연동 흐름에 노션 연결 반영
 
 ### v2.0
 
