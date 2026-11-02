@@ -190,6 +190,86 @@ Request Body:
 
 > Resource는 Backend에서 관리하지만, Resource를 기반으로 생성되는 Chunk 및 Vector 데이터의 저장·검색은 RAG 시스템의 책임입니다.
 
+### [3.2] 노션 연동 (Notion OAuth)
+
+사용자의 노션 워크스페이스를 연결합니다. OAuth 처리와 노션 토큰 저장은 AI 서비스가 맡고, Backend는 로그인 사용자 확인과 AI 서비스 중계만 합니다. 노션 토큰은 Frontend로 전달되지 않습니다. (AI 연동 계약: `ai/docs/api/notion-oauth.md`)
+
+| Method | Endpoint | 설명 | 인증 필요 |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/v1/integrations/notion/authorize` | 노션 연결 시작, 노션 인증 URL 발급 | Yes |
+| `GET` | `/integrations/notion/callback` | 노션이 브라우저를 리다이렉트하는 콜백 (Frontend가 직접 호출하지 않음) | No |
+| `GET` | `/api/v1/integrations/notion/connections` | 현재 사용자의 노션 연결 목록 조회 | Yes |
+
+### 3.2.1 노션 연결 시작
+
+**`POST /api/v1/integrations/notion/authorize`**
+
+Request Body: 없음
+
+Response `200 OK`:
+
+```json
+{
+  "authorizationUrl": "https://api.notion.com/v1/oauth/authorize?client_id=...&state=..."
+}
+```
+
+- 응답에 `notion_oauth_browser` HttpOnly 쿠키가 함께 설정됩니다. Frontend JS에서 읽을 필요는 없으며 브라우저가 자동으로 저장합니다.
+- 응답을 받은 **같은 브라우저**에서 `authorizationUrl`로 이동해야 합니다. (`window.location.href = authorizationUrl`)
+- 쿠키 유효 시간은 10분이며, 한 브라우저에서 연결을 동시에 여러 번 시작하면 마지막 요청만 유효합니다.
+- `localhost`와 `127.0.0.1`을 섞어 쓰면 쿠키가 전달되지 않습니다. 개발 시 `localhost`로 통일합니다.
+
+### 3.2.2 노션 콜백
+
+**`GET /integrations/notion/callback?state=...&code=...`**
+
+노션 권한 허용(또는 취소) 후 브라우저가 이동하는 주소입니다. Backend가 처리 결과를 아래 방식으로 알려줍니다.
+
+- `NOTION_CONNECT_RESULT_URL` 설정 시: 해당 Frontend 주소로 `303` 리다이렉트
+  - 성공: `?status=connected&connectionId=<uuid>`
+  - 실패: `?status=failed&code=<에러 코드>`
+- 미설정 시: 결과를 JSON으로 응답 (성공 시 3.2.3의 연결 객체 1개, 실패 시 공통 에러 형식)
+
+| 에러 코드 | HTTP | 의미 |
+| :--- | :--- | :--- |
+| `NOTION_AUTHORIZATION_FAILED` | 400 / 422 | 사용자가 취소했거나, 만료·재사용·다른 브라우저의 요청 |
+| `NOTION_TOKEN_EXCHANGE_FAILED` | 502 | 노션 토큰 교환 실패 |
+| `NOTION_CONNECTION_SAVE_FAILED` | 503 | 연결 정보 저장 실패 |
+| `AI_SERVICE_UNAVAILABLE` | 503 | AI 서비스 연결 불가 |
+
+실패 시 자동 재시도는 없으며, 3.2.1부터 다시 시작해야 합니다.
+
+### 3.2.3 노션 연결 목록 조회
+
+**`GET /api/v1/integrations/notion/connections`**
+
+Response `200 OK`:
+
+```json
+{
+  "connections": [
+    {
+      "connectionId": "22222222-2222-4222-8222-222222222222",
+      "workspaceId": "33333333-3333-4333-8333-333333333333",
+      "workspaceName": "Example workspace",
+      "botId": "44444444-4444-4444-8444-444444444444",
+      "createdAt": "2026-11-02T01:00:00Z",
+      "status": "connected"
+    }
+  ]
+}
+```
+
+- 연결이 없으면 `connections`는 빈 배열입니다.
+- `workspaceName`은 `null`일 수 있습니다.
+- 한 사용자가 여러 워크스페이스를 연결할 수 있습니다.
+- `status`는 고정값이며 노션 토큰의 실제 유효성을 확인한 값이 아닙니다.
+
+| 에러 코드 | HTTP | 의미 |
+| :--- | :--- | :--- |
+| `AI_SERVICE_UNAVAILABLE` | 503 | AI 서비스 연결 불가 |
+| `AI_SERVICE_ERROR` | 502 | AI 서비스 처리 오류 |
+
 ---
 
 ## 4. 대화 관리 (Messages)
