@@ -24,6 +24,25 @@ def error_response(
     }
 
 
+# 애플리케이션 에러
+# 라우터·의존성 어디서든 raise 하면 공통 에러 응답 형식으로 변환된다.
+class AppError(Exception):
+    def __init__(
+        self,
+        status_code: int,
+        code: str,
+        message: str,
+        retryable: bool = False,
+        details: list | None = None
+    ):
+        super().__init__(message)
+        self.status_code = status_code
+        self.code = code
+        self.message = message
+        self.retryable = retryable
+        self.details = details
+
+
 # HTTP 상태 코드별 에러 코드 / 메시지
 HTTP_ERRORS = {
     status.HTTP_400_BAD_REQUEST: ("BAD_REQUEST", "잘못된 요청입니다."),
@@ -80,6 +99,22 @@ async def http_exception_handler(
     )
 
 
+# 애플리케이션 에러 (AppError)
+async def app_error_handler(
+    request: Request,
+    exc: AppError
+):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_response(
+            code=exc.code,
+            message=exc.message,
+            retryable=exc.retryable,
+            details=exc.details
+        )
+    )
+
+
 # 처리되지 않은 서버 에러 (500)
 async def unhandled_exception_handler(
     request: Request,
@@ -97,6 +132,7 @@ async def unhandled_exception_handler(
 
 # 공통 에러 핸들러 등록
 def register_exception_handlers(app: FastAPI):
+    app.add_exception_handler(AppError, app_error_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
