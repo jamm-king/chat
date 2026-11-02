@@ -1,4 +1,4 @@
-# 찾(Chaj) 서비스 — 프론트엔드 연동 API 레퍼런스 (MVP v2.0)
+# 찾(Chat) 서비스 — 프론트엔드 연동 API 레퍼런스 (MVP v2.0)
 
 ## 1. 개요
 
@@ -246,6 +246,73 @@ Response `200 OK`:
 ```
 
 > Citation은 프론트엔드에서 AI 답변의 출처를 표시하기 위한 데이터입니다. Backend에 Chunk 테이블이 없어지더라도 프론트엔드는 `resourceId`, `title`, `excerpt`, `locator` 등을 이용하여 출처를 표시할 수 있습니다.
+
+- `resourceIds`: `RESOURCE` 모드에서는 1개 이상 필수이며, `GENERAL` 모드에서는 무시됩니다. 중복된 ID는 한 번만 처리됩니다.
+- `citationId`: 답변 본문의 `[1]`, `[2]` 표시와 매칭되는 번호입니다. 답변마다 1부터 시작합니다.
+- 사용자 메시지와 AI 답변은 답변 생성에 성공한 경우에만 대화 기록에 저장됩니다.
+
+Error Response:
+
+| Status | Code | 설명 | retryable |
+| :--- | :--- | :--- | :--- |
+| `404` | `RESOURCE_NOT_FOUND` | 존재하지 않거나 다른 사용자의 자료 (`details`에 해당 ID 포함) | `false` |
+| `409` | `RESOURCE_NOT_READY` | `READY` 상태가 아닌 자료 포함 (`details`에 해당 ID 포함) | `true` |
+| `422` | `VALIDATION_ERROR` | 잘못된 `mode`, 빈 `message`, `RESOURCE` 모드에서 `resourceIds` 누락 | `false` |
+| `502` | `RAG_SERVICE_UNAVAILABLE` | RAG 시스템 답변 생성 실패 | `true` |
+
+### 4.1.2 대화 기록 조회 요청
+
+**`GET /api/v1/messages`**
+
+현재 사용자의 대화 기록을 오래된 순으로 반환합니다.
+
+Response `200 OK`:
+
+```json
+{
+  "messages": [
+    {
+      "messageId": "44444444-4444-4444-8444-444444444444",
+      "role": "USER",
+      "mode": "RESOURCE",
+      "content": "등록된 노션 페이지의 핵심 내용을 요약해줘.",
+      "citations": [],
+      "createdAt": "2026-11-01T06:00:00"
+    },
+    {
+      "messageId": "55555555-5555-4555-8555-555555555555",
+      "role": "ASSISTANT",
+      "mode": "RESOURCE",
+      "content": "노션 페이지의 핵심 요약은 다음과 같습니다.[1]",
+      "citations": [
+        {
+          "citationId": "1",
+          "resourceId": "33333333-3333-4333-8333-333333333333",
+          "title": "프로젝트 참고 문서",
+          "excerpt": "핵심 내용 발췌 텍스트...",
+          "locator": {
+            "type": "URL",
+            "url": "https://example.notion.site/reference-page"
+          }
+        }
+      ],
+      "createdAt": "2026-11-01T06:00:00"
+    }
+  ]
+}
+```
+
+- `role`: `USER` 또는 `ASSISTANT`
+- AI 답변의 `messageId`는 메시지 전송 응답의 `answerId`와 같습니다.
+- `createdAt`은 UTC 기준입니다.
+
+### 4.1.3 대화 기록 초기화 요청
+
+**`DELETE /api/v1/messages`**
+
+현재 사용자의 모든 메시지와 출처(Citation) 기록을 삭제합니다.
+
+Response `204 No Content` (응답 본문 없음)
 
 ---
 
