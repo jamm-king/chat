@@ -6,7 +6,7 @@ from app.routers import auth, messages
 app = FastAPI(
     title="Chat AI RAG Service API",
     version="1.0",
-    description="찿(Chat) 서비스 MVP 백엔드 API 서버"
+    description="찾(Chat) 서비스 MVP 백엔드 API 서버"
 )
 
 # 공통 에러 응답 형식 적용
@@ -24,7 +24,7 @@ app.include_router(messages.router)
 
 @app.get("/")
 def root():
-    return {"message": "Chaj Backend Server is running successfully!"}
+    return {"message": "Chat Backend Server is running successfully!"}
 
 
 if __name__ == "__main__":
