@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from "react";
-import {Link} from "react-router-dom";
+import {Link, useNavigate } from "react-router-dom";
 import "../features/auth/auth.css";
 import { saveTokens } from "../lib/auth";
 
 
+
 export default function LoginPage() {
+    const navigate = useNavigate();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
@@ -23,6 +25,8 @@ export default function LoginPage() {
         }
         setError("");
         saveTokens(data.access_token, data.refresh_token);
+        navigate("/chat");
+
 
     }
     return ( <main className="auth">
