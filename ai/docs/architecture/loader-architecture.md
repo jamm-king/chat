@@ -1,65 +1,55 @@
-# 찾 — 자료 로더 설계
+# Notion 자료 로더 설계
 
-2026-10-29 · 구현 전 설계
+2026-11-03 · OAuth 기반 수집. [Backend–AI 계약](backend-ai-contract.md)이 기준이다.
 
-자료 수집과 LangChain 문서 변환은 AI 하위 프로젝트가 담당한다. Backend는 자료 소유권 검증과 수집 작업 접수·상태 조회를 담당하며, AI 내부 로더를 직접 선택하거나 호출하지 않는다. 기술 스택은 FastAPI, LangChain, PostgreSQL이며 벡터 저장에는 pgvector 확장을 사용하는 안을 기준으로 한다.
+## 범위와 현재 구현
 
-## 서비스 범위와 MVP
+사용자가 OAuth로 연결한 워크스페이스에서 페이지를 선택하면 AI가 해당 연결의 토큰으로 Notion 공식 API를 호출한다. 공개 여부보다 연결의 접근 권한이 기준이다. 공개 URL 스크래핑, HTML 추출, 브라우저 렌더링을 전제로 한 2026-10-29 설계는 대체됐다.
 
-찾은 웹페이지와 파일(PPT, Word, TXT, PDF 등)의 내용을 수집하고 검색·근거 기반 답변에 활용하는 서비스다. 자료의 목적은 학습으로 제한하지 않는다.
+현재 `app/loader.py`의 `load_page(client, page_id)`가 페이지 정보와 Markdown을 조회해 `list[langchain_core.documents.Document]`를 반환한다. 현재 동기 등록은 `app/resources.py`에서 원본·본문·참조를 저장한다. 목표 비동기 접수·색인 API는 아직 구현하지 않았다.
 
-MVP는 사용자가 공개 노션 페이지 URL 한 개를 등록하면 해당 페이지를 수집하고 청킹·임베딩하여 검색 가능한 자료로 만드는 흐름을 구현한다. 목표는 수집·검색·답변의 품질과 처리 시간 검증이다. 일반 웹페이지 수집, 파일 입력, 하위 페이지 일괄 수집은 이후 확장한다. 공개 페이지라도 접근 실패나 본문 추출 실패가 발생할 수 있으며 모든 노션 URL의 수집 성공을 보장하지 않는다.
-
-## 로더 구조
+## 수집·색인 흐름
 
 ```text
-FastAPI: 접수·메모리 작업 상태 등록 → 202 반환
-  ↓ 같은 프로세스에서 비동기 실행
-NotionWebLoader → LangChain Document 목록
-  → 청킹 → 임베딩 → PostgreSQL에 색인 → READY
+Backend: userId·resourceId·jobId·connectionId·pageId·operation 전달
+AI: 소유권 확인 → 작업 등록 → 202 반환
+  ↓ 접수 응답 후 같은 프로세스에서 비동기 실행 가능
+NotionClient → load_page → Document 목록
+  → 원본·본문·참조 저장 → EXTRACTED
+  ├─ COLLECT: SUCCEEDED / 자료 COLLECTED
+  └─ COLLECT_AND_INDEX: 청킹 → 임베딩 → 색인 공개
+                         → SUCCEEDED / 자료 READY
 ```
 
-- MVP에는 공개 노션 URL을 받아 `list[Document]`를 반환하는 `NotionWebLoader`를 구현한다. `Document`는 `langchain_core.documents.Document`다. 웹 수집을 기다리는 호출은 비동기로 처리하고 동기 파서가 요청 처리 루프를 장시간 막지 않게 한다.
-- 로더 내부에서 URL 검증·수집·본문 추출을 수행한다. 별도 `ResourceLoader` 추상 클래스, 로더 선택기, 사이트별 플러그인 체계는 만들지 않는다. 수집과 추출은 필요에 따라 함수 수준으로 나누어 추출 결과를 확인하기 쉽게 한다.
-- 청킹·임베딩은 로더 외부의 공통 파이프라인이 담당한다. 로더는 벡터 데이터를 생성하거나 대화를 저장하지 않는다.
-- 기존 `source.type: URL`을 유지한다. 노션은 웹 로더의 수집 대상이며 별도 자료 유형이 아니다. 향후 파일 입력 계약은 파일 저장·소유권·형식 검증 정책과 함께 별도로 정의한다.
-- FastAPI는 기존 비동기 접수·상태 조회 API를 제공하고, 실행 상태·취소·현재 프로세스 내 중복 확인은 메모리에서 관리한다. PostgreSQL에는 검색용 데이터와 색인 완료 여부를 저장한다. 부분 색인은 검색하지 않는다.
-- 별도 워커·영속 큐·자동 재시도·재시작 복구는 구현하지 않는다. 단일 프로세스로 실행하며, 재시작 시 진행 작업과 조회 상태는 유실되고 완료된 DB 자료는 유지된다. API 동작은 [AI 서비스 정책](../api/references.md)의 MVP 범위를 따른다.
+직접 HTTP 호출은 동기 클라이언트이므로 목표 비동기 파이프라인에서는 스레드 등으로 실행해 이벤트 루프를 막지 않는다. 별도 워커·큐는 필수가 아니다. 청킹·임베딩은 로더 외부에서 담당하고 로더는 대화·벡터를 저장하지 않는다. 범용 로더 추상 클래스·선택기는 현재 필요하지 않다.
 
-## 공통 문서 출력
+## Document와 저장 데이터
 
-로더 출력은 LangChain `Document` 목록이다. 각 문서는 의미 있는 절 또는 본문 구간을 나타내며, 아직 임베딩용 최종 청크는 아니다. 별도 공통 문서 클래스를 만들지 않는다. 다음은 로더와 청킹 단계 사이의 내부 규약으로 Backend ↔ AI API의 추가 필드를 의미하지 않는다.
-
-| 항목 | 내용 |
+| 항목 | 의미 |
 | --- | --- |
-| `page_content` | 제목·문단·목록·표의 순서와 경계를 보존한 텍스트. Markdown 표현을 사용할 수 있다. |
-| `metadata.title` | 원문 제목. 추출할 수 없으면 null |
-| `metadata.source` | 최종 원문 URL |
-| `metadata.original_url` | 사용자가 입력한 URL |
-| `metadata.collected_at` | 수집 완료 UTC 시각 |
-| `metadata.section` | 본문 구간의 절 제목. 없으면 null |
-| `metadata.sequence` | 문서 내 구간 순서(0부터 시작) |
+| page_content | 현재 페이지 Markdown. 제목·목록·표·체크박스·링크 보존 |
+| metadata.page_id | Notion 원본 ID |
+| metadata.title / source | 원문 제목·URL |
+| metadata.last_edited_time / collected_at | 원문 수정·수집 UTC 시각 |
+| metadata.sequence | 문서 내 구간 순서 |
+| metadata.raw_content | API 원본 Markdown |
+| metadata.references | 페이지·DB·미디어 참조 목록 |
+| metadata.content_status / truncated / unknown_block_ids / warnings | 본문 완전성 진단 |
 
-청킹 시 문서 순서와 metadata를 보존한다. 저장 시 인증된 요청에서 `userId`, `resourceId`를 부여하고 청크 ID·순서를 생성한다. 원문에서 가져온 사용자·자료 ID를 신뢰하지 않는다. MVP 외부 출처 응답은 기존 `locator: {type: URL, url, section}`을 유지하며 정밀한 블록 이동을 보장하지 않는다. 노션 블록 ID를 항상 얻을 수 있다고 가정하지 않는다.
+현재는 한 페이지를 Document 하나로 반환하며 raw_content와 page_content가 같다. 원본·검색용 본문 필드는 구분하되 정제는 아직 하지 않는다. 별도 공통 문서 클래스를 도입하지 않는다.
 
-## 이후 확장 방향
+목표 저장 시 userId·resourceId는 Backend 요청에서 검증해 부여한다. 원본 문서에서 사용자·서비스 자료 ID를 읽지 않는다. 기존 AI 자체 UUID를 Backend 자료 ID로 자동 간주하지 않는다. 청크는 부모 resourceId와 출처 metadata를 보존한다.
 
-다음 수집 대상을 추가할 때 웹 로더와 파일 로더를 구분하고 필요한 공통 계약을 도입한다. 파일 로더는 PPT·Word·TXT 등 형식별 파서로 내용을 읽어 `Document`로 변환한다. 현재는 파일 로더·범용 로더 선택기·별도 문서 모델을 구현하지 않는다.
+## 참조 처리
 
-## MVP 노션 수집 정책
+`app/references.py`는 Notion 확장 Markdown의 page/database/video 등 태그에서 참조를 추출한다. 현재 모든 일반 Markdown 링크를 페이지 참조로 해석하는 것은 아니다. 파싱된 페이지 참조의 can_register는 ID 해석 가능 여부이며 실제 접근 권한 보증이 아니다.
 
-- 로그인 없이 열람 가능한 `notion.site`, `notion.so` 및 각 하위 도메인의 노션 페이지를 대상으로 한다. 사용자 지정 도메인은 이후 확장한다.
-- 사용자는 URL만 입력한다. 노션 OAuth 연결, 공식 API 토큰, 사용자의 로그인 쿠키는 요구하지 않는다. 비공개 자료 연결은 별도 기능으로 검토한다.
-- HTML 직접 추출을 우선하고, 필요한 경우 브라우저 렌더링 후 본문을 추출한다. 구체적인 추출 방법과 본문 준비 판정은 실제 공개 노션 페이지로 검증한다.
-- 입력 페이지 본문만 수집한다. 표·토글 등의 추출 가능 범위를 검증하고, 하위 페이지·첨부파일·외부 임베드 본문과 이미지 OCR은 제외한다.
-- 최초 URL뿐 아니라 리다이렉트, 브라우저 이동, 렌더링 하위 요청에도 공개 주소 검사를 적용한다. 본문 렌더링을 위한 하위 요청 허용과 링크를 따라 다른 문서를 수집하는 동작은 구분한다.
-- 로그인·접근 제한·로딩 화면만 얻은 경우 색인하지 않는다. 구체적인 실패 코드와 한도는 [AI 서비스 정책](../api/references.md)의 수집 표와 오류 정책을 따른다.
-- 자동 동기화는 MVP 범위에 포함하지 않는다. 수집 시점의 내용을 색인하며 원문 변경 후 다시 수집하려면 기존 정책에 따라 새 자료 ID로 등록한다.
+참조는 자동 수집하지 않는다. Frontend가 보여준 참조를 사용자가 선택할 때만 새 자료·작업으로 등록한다. 부모 소유권·같은 연결·실제 참조 여부를 확인하고 자식 접근 권한을 다시 확인한다. 자식 실패는 부모를 변경하지 않는다. 찾의 parentResourceId는 서비스 계층이며 Notion 계층 복제가 아니다.
 
-## 구현 전에 검증·확정할 항목
+DB 행, 하위 페이지 일괄 수집, 외부 임베드 내용, 첨부파일 본문·이미지 OCR은 제외한다. DB는 참조로만 표시한다. 참조를 따라가지 않았다는 이유로 부모를 partial로 표시하지 않는다.
 
-공개 노션 페이지를 대상으로 HTML 직접 추출과 브라우저 렌더링을 비교하고 제목·본문·목록·표·중첩 토글의 추출 결과를 확인한다. 로그인 필요, 삭제, 미지원 URL, 본문 없는 페이지, 렌더링 시간 초과도 확인한다.
+본문 잘림·unknown 블록은 partial로 저장한다. COLLECT는 부분 본문을 진단용으로 보존할 수 있지만 색인은 CONTENT_INCOMPLETE로 실패한다. 빈 본문은 저장할 수 있고 색인 시 텍스트가 없으면 EMPTY_CONTENT다. `complete`와 `READY`는 다른 개념이다.
 
-브라우저 렌더링의 본문 준비 조건, 시도별 기한, 총 전송량·요청 수·메모리 한도를 검증 결과에 따라 확정하고 AI 서비스 정책과 OpenAPI 설명에 함께 반영한다. 이 문서는 구현·지원 검증이 완료되었다는 의미가 아니다.
+## 후속 범위
 
-품질과 처리 시간의 평가 절차는 [MVP 검증 계획](../mvp-validation.md)에 정의한다.
+자동 동기화·Webhook·전체 워크스페이스 탐색·파일·일반 웹페이지 로더는 이후 확장한다. 작업 수명과 재시작 제약은 [API 계약](../api/references.md), 검증은 [검증 계획](../mvp-validation.md)을 따른다.

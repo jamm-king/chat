@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AI Service Internal API",
-    "version": "1.0.0",
-    "description": "구현 전 AI MVP 계약. 내부 API 5개의 경로·입출력 형식 유지. 단일 프로세스 메모리 작업 관리이며 자동 재시도·영속 큐·재시작 복구·30일 보존은 미구현. FastAPI·LangChain·PostgreSQL 기반. 상세: references.md."
+    "version": "2.0.0",
+    "description": "목표 계약·미구현: OAuth 연결 기반 비동기 수집·색인·검색·삭제. Backend 공통 resourceId, COLLECT/COLLECT_AND_INDEX, 자료 COLLECTED/READY 구분. 현행 OAuth·동기 API는 런타임 OpenAPI와 notion-oauth.md 참조. 기준: ../architecture/backend-ai-contract.md."
   },
   "servers": [
     {
@@ -37,8 +37,8 @@
         "tags": [
           "Ingestions"
         ],
-        "summary": "공개 노션 페이지 URL 비동기 색인 접수(MVP)",
-        "description": "jobId는 Backend 발급. 현재 프로세스 메모리에 남은 동일 입력은 현재 작업 반환, 다른 입력 재사용은 충돌. 접수는 비영속이며 재시작을 넘는 멱등성 없음. 자동 재시도·복구 없음. 유실 작업 재등록은 새 작업·자료 ID 사용. 접수 기한 5초, 실행 중 비동기 전체 기한 10분. 상세: references.md.",
+        "summary": "선택한 Notion 페이지의 비동기 수집·색인 접수 (목표)",
+        "description": "Backend가 userId·resourceId·jobId·connectionId·pageId·operation을 전달. AI가 소유권·ID 충돌을 검사하고 본문 수집 전에 202를 반환. COLLECT 성공은 COLLECTED, COLLECT_AND_INDEX 성공은 READY. 색인 기능 미구현 시 후자는 OPERATION_NOT_AVAILABLE로 거절. 자동 재귀 수집·URL 스크래핑 없음. 초기 메모리 작업 관리·재시작 유실 허용. references.md 참조.",
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
@@ -50,6 +50,15 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/IngestionRequest"
+              },
+              "example": {
+                "jobId": "22222222-2222-4222-8222-222222222222",
+                "userId": "11111111-1111-4111-8111-111111111111",
+                "resourceId": "33333333-3333-4333-8333-333333333333",
+                "connectionId": "44444444-4444-4444-8444-444444444444",
+                "pageId": "55555555-5555-4555-8555-555555555555",
+                "parentResourceId": null,
+                "operation": "COLLECT"
               }
             }
           }
@@ -105,11 +114,13 @@
                   "userId": "11111111-1111-4111-8111-111111111111",
                   "resourceId": "33333333-3333-4333-8333-333333333333",
                   "status": "QUEUED",
-                  "createdAt": "2026-10-28T06:00:00Z",
+                  "createdAt": "2026-11-03T01:00:00Z",
                   "startedAt": null,
                   "completedAt": null,
                   "result": null,
-                  "error": null
+                  "error": null,
+                  "operation": "COLLECT",
+                  "resourceStatus": "PROCESSING"
                 }
               }
             }
@@ -124,7 +135,7 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "description": "JOB_NOT_FOUND (향후 확장용 응답 유지. MVP 신규 접수에서는 사용하지 않음)",
+            "description": "CONNECTION_NOT_FOUND / RESOURCE_NOT_FOUND: 연결·부모 자료가 없거나 사용자의 접근 범위에 없음",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -142,7 +153,7 @@
             }
           },
           "409": {
-            "description": "JOB_ID_CONFLICT / INGESTION_IN_PROGRESS / RESOURCE_ALREADY_INDEXED / RESOURCE_DELETED",
+            "description": "JOB_ID_CONFLICT / INGESTION_IN_PROGRESS / RESOURCE_ID_CONFLICT / RESOURCE_ALREADY_COLLECTED / RESOURCE_ALREADY_INDEXED / RESOURCE_DELETED / OPERATION_NOT_AVAILABLE / INVALID_PARENT_REFERENCE",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -281,8 +292,8 @@
         "tags": [
           "Resources"
         ],
-        "summary": "검색 제외 및 온라인 RAG 데이터 삭제",
-        "description": "사용자 범위의 검색 제외·청크·임베딩 삭제 후 204. 없는 자료도 204. 현재 프로세스 작업을 취소하고 색인 완료 반영과 조율하여 재공개 방지. 삭제 이력은 메모리에만 유지. 영속 삭제 이력·분산 복구·자동 재시도 없음. 실패 503, 기한 초과 504. 처리 기한 10초. 본문·미정의 query 금지. 상세: references.md.",
+        "summary": "자료 검색 차단 및 AI 저장 데이터 삭제 (목표)",
+        "description": "사용자 범위로 진행 작업 취소·검색 차단 후 원본·본문·참조·청크·벡터 삭제, 204. 반복 삭제도 204. 부모 삭제는 자식 자동 삭제 없이 부모 관계 해제. 늦은 완료로 재공개 금지. Backend는 검색 제외와 과거 출처 스냅샷 보존. 실패 503/504이며 삭제 완료로 표시하지 않는다. 현재 런타임에는 미구현.",
         "parameters": [
           {
             "name": "resourceId",
@@ -618,7 +629,12 @@
                   "AI_PROVIDER_ERROR",
                   "AI_SERVICE_UNAVAILABLE",
                   "AI_SERVICE_TIMEOUT",
-                  "INTERNAL_ERROR"
+                  "INTERNAL_ERROR",
+                  "OPERATION_NOT_AVAILABLE",
+                  "RESOURCE_ALREADY_COLLECTED",
+                  "RESOURCE_ID_CONFLICT",
+                  "INVALID_PARENT_REFERENCE",
+                  "CONNECTION_NOT_FOUND"
                 ]
               },
               "message": {
@@ -652,30 +668,6 @@
           "requestId"
         ]
       },
-      "Source": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "URL"
-            ]
-          },
-          "url": {
-            "type": "string",
-            "format": "uri",
-            "maxLength": 2048,
-            "description": "로그인이나 별도 접근 권한 없이 열람 가능한 공개 노션 페이지의 HTTP(S) URL. MVP 대상 호스트는 notion.site, notion.so 및 각 하위 도메인. 사용자 지정 도메인·일반 웹페이지는 이후 확장. 사용자 정보·fragment·비표준 포트 금지.",
-            "pattern": "^https?://"
-          }
-        },
-        "required": [
-          "type",
-          "url"
-        ],
-        "description": "웹 로더가 공개 노션 페이지 한 개를 스크래핑하고 필요 시 브라우저 렌더링을 수행. 공식 API 인증·사용자 쿠키·파일 입력·하위 페이지 재귀 수집은 미지원. 최초 HTML은 압축 해제 후 최대 5 MiB, 추출 본문 최대 200,000자. 직접 수집은 15초/시도. 브라우저 시도별 기한과 총 전송량·요청 수·메모리 한도는 수집 검증 후 구현 전에 확정. 전체 작업 기한은 10분. 문서 이동·리다이렉트 최대 3회. 렌더링 하위 요청을 포함해 공개 목적지와 실제 연결 주소를 검사. 상세: references.md와 ../architecture/loader-architecture.md."
-      },
       "IngestionRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -692,16 +684,43 @@
             "type": "string",
             "format": "uuid"
           },
-          "source": {
-            "$ref": "#/components/schemas/Source"
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parentResourceId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "COLLECT",
+              "COLLECT_AND_INDEX"
+            ]
           }
         },
         "required": [
           "jobId",
           "userId",
           "resourceId",
-          "source"
-        ]
+          "connectionId",
+          "pageId",
+          "operation"
+        ],
+        "description": "Backend와 AI가 같은 resourceId를 사용한다. parentResourceId는 사용자 선택 참조 등록에만 지정한다. 해당 페이지 한 개만 수집한다."
       },
       "JobError": {
         "type": "object",
@@ -710,15 +729,16 @@
           "code": {
             "type": "string",
             "enum": [
-              "SOURCE_ACCESS_DENIED",
-              "SOURCE_NOT_FOUND",
-              "SOURCE_FETCH_FAILED",
-              "SOURCE_FETCH_TIMEOUT",
-              "SOURCE_BLOCKED",
-              "SOURCE_TOO_LARGE",
-              "UNSUPPORTED_CONTENT_TYPE",
-              "UNSUPPORTED_SOURCE",
+              "NOTION_REAUTHORIZATION_REQUIRED",
+              "NOTION_ACCESS_DENIED",
+              "NOTION_PAGE_NOT_FOUND",
+              "NOTION_RATE_LIMITED",
+              "NOTION_TIMEOUT",
+              "NOTION_UNAVAILABLE",
+              "NOTION_OVERLOADED",
+              "NOTION_INVALID_RESPONSE",
               "CONTENT_EXTRACTION_FAILED",
+              "CONTENT_INCOMPLETE",
               "EMPTY_CONTENT",
               "EMBEDDING_FAILED",
               "INDEX_WRITE_FAILED",
@@ -740,7 +760,7 @@
           "message",
           "retryable"
         ],
-        "description": "비동기 작업 실패. retryable은 사용자 선택에 따른 새 jobId 재시도 가능 정보이며 자동 재시도 지시가 아님. 작업 유실 뒤에는 새 resourceId도 사용. CANCELLED의 코드는 RESOURCE_DELETED이며 retryable=false."
+        "description": "작업 실패 결과. retryable은 사용자 재시도 가능 여부이며 자동 재시도가 아니다. Backend는 최신 작업 오류를 자료 상세에 반영한다."
       },
       "IngestionResult": {
         "type": "object",
@@ -765,19 +785,44 @@
           },
           "chunkCount": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 0
           },
           "indexedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "contentStatus": {
             "type": "string",
-            "format": "date-time"
+            "enum": [
+              "complete",
+              "partial"
+            ]
+          },
+          "referenceCount": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": [
           "title",
           "canonicalUrl",
           "chunkCount",
-          "indexedAt"
-        ]
+          "indexedAt",
+          "ready",
+          "contentStatus",
+          "referenceCount"
+        ],
+        "description": "작업 성공 결과. COLLECT는 ready=false, chunkCount=0, indexedAt=null. 색인 완료만 ready=true. 참조는 자동 수집하지 않는다."
       },
       "IngestionJob": {
         "type": "object",
@@ -800,6 +845,7 @@
             "enum": [
               "QUEUED",
               "EXTRACTING",
+              "EXTRACTED",
               "INDEXING",
               "SUCCEEDED",
               "FAILED",
@@ -851,6 +897,23 @@
                 "type": "null"
               }
             ]
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "COLLECT",
+              "COLLECT_AND_INDEX"
+            ]
+          },
+          "resourceStatus": {
+            "type": "string",
+            "enum": [
+              "PROCESSING",
+              "COLLECTED",
+              "READY",
+              "FAILED",
+              "DELETED"
+            ]
           }
         },
         "required": [
@@ -862,7 +925,9 @@
           "startedAt",
           "completedAt",
           "result",
-          "error"
+          "error",
+          "operation",
+          "resourceStatus"
         ],
         "allOf": [
           {
@@ -896,6 +961,7 @@
                 "status": {
                   "enum": [
                     "EXTRACTING",
+                    "EXTRACTED",
                     "INDEXING"
                   ]
                 }
@@ -991,12 +1057,138 @@
                       "const": false
                     }
                   }
+                },
+                "resourceStatus": {
+                  "const": "DELETED"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "QUEUED",
+                    "EXTRACTING",
+                    "EXTRACTED",
+                    "INDEXING"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "resourceStatus": {
+                  "const": "PROCESSING"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "FAILED"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "resourceStatus": {
+                  "const": "FAILED"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "operation": {
+                  "const": "COLLECT"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "status": {
+                  "not": {
+                    "const": "INDEXING"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "SUCCEEDED"
+                },
+                "operation": {
+                  "const": "COLLECT"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "resourceStatus": {
+                  "const": "COLLECTED"
+                },
+                "result": {
+                  "properties": {
+                    "ready": {
+                      "const": false
+                    },
+                    "chunkCount": {
+                      "const": 0
+                    },
+                    "indexedAt": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "SUCCEEDED"
+                },
+                "operation": {
+                  "const": "COLLECT_AND_INDEX"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "resourceStatus": {
+                  "const": "READY"
+                },
+                "result": {
+                  "properties": {
+                    "ready": {
+                      "const": true
+                    },
+                    "chunkCount": {
+                      "minimum": 1
+                    },
+                    "indexedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "contentStatus": {
+                      "const": "complete"
+                    }
+                  }
                 }
               }
             }
           }
         ],
-        "description": "진행: QUEUED → EXTRACTING → INDEXING → SUCCEEDED. 각 진행 상태는 FAILED/CANCELLED로 종료 가능. 종료 상태 불변. 프로세스 실행 중 전체 기한 10분. 작업은 메모리 관리, 재시작 시 유실되며 복구·30일 보존 없음. 완료된 검색용 DB 데이터는 유지. references.md 참조."
+        "description": "COLLECT: QUEUED→EXTRACTING→EXTRACTED→SUCCEEDED (COLLECTED). COLLECT_AND_INDEX는 INDEXING 후 SUCCEEDED (READY). 종료는 SUCCEEDED/FAILED/CANCELLED. EXTRACTED는 중간 상태. 기존 COLLECTED 본문 색인 승격 시 수집 단계 생략. 초기 작업 메모리 관리·재시작 404, 자동 복구 없음."
       },
       "SourceLocator": {
         "type": "object",
@@ -1675,5 +1867,6 @@
   "externalDocs": {
     "description": "호출 방법과 정책 설명",
     "url": "./references.md"
-  }
+  },
+  "x-implementation-status": "target-not-implemented"
 }
