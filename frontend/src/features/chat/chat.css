@@ -15,6 +15,8 @@
 }
 
 .chat-side {
+  display: grid;
+  grid-template-rows: 1fr auto;
   padding: 24px 20px;
 }
 
@@ -69,4 +71,13 @@
 .chat-input button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+.chat-logout {
+  justify-self: start;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
 }

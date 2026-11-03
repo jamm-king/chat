@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Navigate } from "react-router-dom";
-import { getAccessToken } from "../lib/auth";
+import { Navigate, useNavigate } from "react-router-dom";
+import { clearTokens, getAccessToken, getRefreshToken } from "../lib/auth";
 import "../features/chat/chat.css";
 import MessageBubble from "../features/chat/MessageBubble";
 
@@ -10,9 +10,11 @@ type Message = {
 };
 
 export default function ChatPage() {
+    const navigate = useNavigate();
     const [text, setText] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
-        useEffect(() => {
+
+    useEffect(() => {
         if (!getAccessToken()) return;
         const load = async () => {
             const response = await fetch("/api/v1/messages", {
@@ -24,7 +26,6 @@ export default function ChatPage() {
         };
         load();
     }, []);
-
 
     if (!getAccessToken()) {
         return <Navigate to="/login" replace />;
@@ -49,9 +50,25 @@ export default function ChatPage() {
         setMessages((prev) => [...prev, { role: "ASSISTANT", content: answer }]);
     };
 
+    const logout = async () => {
+        try {
+            await fetch("/api/v1/auth/logout", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ refresh_token: getRefreshToken() }),
+            });
+        } finally {
+            clearTokens();
+            navigate("/login", { replace: true });
+        }
+    };
+
     return (
         <div className="chat">
-            <aside className="chat-side">자료 목록 자리</aside>
+            <aside className="chat-side">
+                <p>자료 목록 자리</p>
+                <button type="button" className="chat-logout" onClick={logout}>로그아웃</button>
+            </aside>
             <main className="chat-main">
                 <header className="chat-head">대화</header>
                 <section className="chat-list">
