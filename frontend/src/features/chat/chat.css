@@ -40,27 +40,33 @@
 }
 
 .chat-input {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
   padding: 16px 24px;
   border-top: 1px solid var(--line);
 }
 
-.bubble {
-  max-width: 70%;
-  margin: 0;
-  padding: 12px 16px;
-  border-radius: 18px;
-  line-height: 1.5;
-  white-space: pre-wrap;
+.chat-input input {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
 }
 
-.bubble-user {
-  justify-self: end;
+.chat-input button {
+  padding: 0 20px;
+  border: 0;
+  border-radius: 12px;
   background: var(--accent);
   color: var(--on-accent);
+  font-weight: 700;
+  cursor: pointer;
 }
 
-.bubble-assistant {
-  justify-self: start;
-  border: 1px solid var(--line);
-  background: var(--card);
+.chat-input button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
