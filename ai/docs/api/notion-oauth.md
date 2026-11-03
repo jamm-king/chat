@@ -1,11 +1,15 @@
 # Notion OAuth: Backend Integration Contract
 
-Updated: 2026-11-02. Implementation: `ai/app`.
+Updated: 2026-11-03. Implementation: `ai/app` and `backend/app/routers/notion.py`.
 
 This document describes the three implemented AI endpoints used to connect a
-Notion workspace to an authenticated Chat user. Backend authentication, cookie
-relay, and completion UI are integration work; they are not implemented by these
-AI endpoints. The separate [RAG proposal](references.md) is not this contract.
+Notion workspace to an authenticated Chat user. Backend already implements
+authentication-based user selection, cookie/callback relay, and completion
+redirects. End-to-end deployment still needs matching origins and configuration.
+The [Backend–AI architecture](../architecture/backend-ai-contract.md) defines
+the overall target; the [target ingestion/RAG contract](references.md) is not
+implemented by these OAuth endpoints. Keep the existing cookie relay; a separate
+one-time browser-start URL API is not required.
 
 ## Ownership and prerequisites
 
@@ -37,7 +41,7 @@ Example local topology:
 | Backend browser-facing origin | `http://localhost:8000` |
 | Browser-facing callback through Backend | `http://localhost:8000/integrations/notion/callback` |
 
-Backend must implement the browser-facing routes and relay described below.
+Backend implements the browser-facing routes and relay described below.
 For an AI-only browser test, use
 `http://localhost:8001/integrations/notion/callback` instead.
 
@@ -160,7 +164,9 @@ deletion header on success and handled failure. FastAPI validation failures can
 occur before this handler runs and do not perform this cleanup.
 
 The current AI callback returns JSON. It does not redirect to the frontend or
-notify Backend separately. Backend must implement any completion redirect/UI.
+notify Backend separately. Backend already relays the result and redirects to
+its configured NOTION_CONNECT_RESULT_URL. Frontend should re-fetch connections;
+a URL status alone is not proof of ownership or current token validity.
 
 ## 3. List saved connections
 
@@ -254,10 +260,12 @@ authorization URLs containing state.
 
 ## Local setup and verification
 
-Run from `C:\workspace\chat\ai` in CMD. Docker Desktop must be running.
+Run from the repository's `ai` directory in CMD (for example
+`C:\workspaces\chat\ai`). A running PostgreSQL server and pre-created `find_ai`
+database are required. Windows-native PostgreSQL is supported; Docker is optional.
 
 ```bat
-cd C:\workspace\chat\ai
+cd C:\workspaces\chat\ai
 .venv\Scripts\activate
 python -m pip install -e ".[test]"
 ```
@@ -279,15 +287,28 @@ Generate a local key with
 `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
 Keep it local and do not include it in shared logs or screenshots.
 
+For Windows-native PostgreSQL 17, create the database from PowerShell (adjust the
+version to your installation). Enter your database password when prompted:
+
+```powershell
+& 'C:\Program Files\PostgreSQL\17\bin\psql.exe' -h 127.0.0.1 -U postgres -d postgres -c 'CREATE DATABASE find_ai;'
+```
+
+Skip creation if the database exists. Match DATABASE_URL to the actual account,
+password and port; URL-encode special characters in the password. Using 127.0.0.1
+for DB access does not require changing the browser-facing callback hostname.
+Alternatively, run `docker compose up -d --wait db` with Docker Desktop running.
+Do not run both servers on the same host port.
+
 ```bat
-docker compose up -d db
-docker compose ps
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --no-access-log
 ```
 
 Wait for the database to be healthy and `Application startup complete.` in AI's
-console. Startup creates missing AI tables. This runs `app`, not the independent
-`src` implementation. No separate compilation step is required. Inspect
+console. Startup creates missing AI tables, not the database/server itself.
+This runs `app.main:app`. No separate compilation step is required. Disable
+access logs so callback codes/state are not printed. Avoid reload/restart during
+authorization because pending state is in process memory. Inspect
 [Swagger UI](http://localhost:8001/docs) and
 [runtime OpenAPI](http://localhost:8001/openapi.json) for generated schema details.
 
