@@ -56,7 +56,7 @@ def setup_app(settings):
 
 
 def begin(client):
-    response = client.get("/integrations/notion/authorize", params={"userId": USER_ID}, headers=HEADERS)
+    response = client.post("/integrations/notion/authorize", json={"userId": USER_ID}, headers=HEADERS)
     assert response.status_code == 200
     url = response.json()["authorization_url"]
     query = parse_qs(urlsplit(url).query)
@@ -95,17 +95,55 @@ def test_success_persists_encrypted_tokens_without_exposing_them(setup_app, sett
 
 def test_service_auth_is_required(setup_app):
     client, _, calls = setup_app
-    for path in ["/integrations/notion/authorize", "/integrations/notion/connections"]:
-        assert client.get(path).status_code == 401
-        assert client.get(path, headers={"Authorization": "Bearer wrong"}).status_code == 401
+    for headers in [{}, {"Authorization": "Bearer wrong"}]:
+        assert client.post(
+            "/integrations/notion/authorize", json={"userId": USER_ID}, headers=headers,
+        ).status_code == 401
+        assert client.get("/integrations/notion/connections", headers=headers).status_code == 401
+    assert not client.app.state.oauth_states.pending
     assert not calls
 
 
 def test_user_id_is_required_and_validated(setup_app):
     client, _, calls = setup_app
-    for path in ["/integrations/notion/authorize", "/integrations/notion/connections"]:
-        assert client.get(path, headers=HEADERS).status_code == 422
-        assert client.get(path, params={"userId": "invalid"}, headers=HEADERS).status_code == 422
+    path = "/integrations/notion/connections"
+    assert client.get(path, headers=HEADERS).status_code == 422
+    assert client.get(path, params={"userId": "invalid"}, headers=HEADERS).status_code == 422
+    assert not calls
+
+
+@pytest.mark.parametrize("body", [
+    {}, {"userId": "invalid"}, {"userId": None},
+    {"userId": USER_ID, "unexpected": True}, {"user_id": USER_ID},
+])
+def test_authorization_rejects_invalid_body_without_creating_state(setup_app, body):
+    client, _, calls = setup_app
+    response = client.post("/integrations/notion/authorize", json=body, headers=HEADERS)
+    assert response.status_code == 422
+    assert COOKIE_NAME not in client.cookies
+    assert not client.app.state.oauth_states.pending
+    assert not calls
+
+
+def test_authorization_requires_json_body_instead_of_query_user_id(setup_app):
+    client, _, calls = setup_app
+    response = client.post(
+        "/integrations/notion/authorize", params={"userId": USER_ID}, headers=HEADERS,
+    )
+    assert response.status_code == 422
+    assert COOKIE_NAME not in client.cookies
+    assert not client.app.state.oauth_states.pending
+    assert not calls
+
+
+def test_get_authorization_is_not_allowed_and_does_not_create_state(setup_app):
+    client, _, calls = setup_app
+    response = client.get(
+        "/integrations/notion/authorize", params={"userId": USER_ID}, headers=HEADERS,
+    )
+    assert response.status_code == 405
+    assert COOKIE_NAME not in client.cookies
+    assert not client.app.state.oauth_states.pending
     assert not calls
 
 

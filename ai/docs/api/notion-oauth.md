@@ -1,11 +1,15 @@
 # Notion OAuth: Backend Integration Contract
 
-Updated: 2026-11-02. Implementation: `ai/app`.
+Updated: 2026-11-03. Implementation: `ai/app` and `backend/app/routers/notion.py`.
 
 This document describes the three implemented AI endpoints used to connect a
-Notion workspace to an authenticated Chat user. Backend authentication, cookie
-relay, and completion UI are integration work; they are not implemented by these
-AI endpoints. The separate [RAG proposal](references.md) is not this contract.
+Notion workspace to an authenticated Chat user. Backend already implements
+authentication-based user selection, cookie/callback relay, and completion
+redirects. End-to-end deployment still needs matching origins and configuration.
+The [Backend–AI architecture](../architecture/backend-ai-contract.md) defines
+the overall target; the [target ingestion/RAG contract](references.md) is not
+implemented by these OAuth endpoints. Keep the existing cookie relay; a separate
+one-time browser-start URL API is not required.
 
 ## Ownership and prerequisites
 
@@ -37,26 +41,35 @@ Example local topology:
 | Backend browser-facing origin | `http://localhost:8000` |
 | Browser-facing callback through Backend | `http://localhost:8000/integrations/notion/callback` |
 
-Backend must implement the browser-facing routes and relay described below.
+Backend implements the browser-facing routes and relay described below.
 For an AI-only browser test, use
 `http://localhost:8001/integrations/notion/callback` instead.
 
 Requests and responses use JSON where applicable. IDs are UUIDs and timestamp
-fields are ISO 8601 date-time strings. Query names are case-sensitive:
-`userId` is camelCase; response fields are snake_case. Every successful endpoint
+fields are ISO 8601 date-time strings. Request field names are case-sensitive:
+`userId` is camelCase (JSON body for authorization start, query for connection
+listing); response fields are snake_case. Every successful endpoint
 below returns `Cache-Control: no-store`.
 
 ## 1. Start authorization
 
 ```http
-GET /integrations/notion/authorize?userId=11111111-1111-4111-8111-111111111111
+POST /integrations/notion/authorize
 Authorization: Bearer <AI_SERVICE_TOKEN>
+Content-Type: application/json
+
+{"userId": "11111111-1111-4111-8111-111111111111"}
 ```
 
 | Input | Location | Required | Rule |
 | --- | --- | --- | --- |
 | Service token | Authorization header | Yes | Configured `AI_SERVICE_TOKEN`. |
-| `userId` | Query | Yes | User UUID derived from Backend's authenticated session. |
+| `userId` | JSON body | Yes | User UUID derived from Backend's authenticated session. |
+
+The body is required; a query-only `userId` is insufficient. Null, malformed UUIDs,
+and unknown body fields are rejected with 422. Authorization start creates pending
+state and a browser cookie, so it uses POST. Previous GET clients must migrate:
+`GET /integrations/notion/authorize` now returns 405 without creating state.
 
 Success: `200 OK`.
 
@@ -151,7 +164,9 @@ deletion header on success and handled failure. FastAPI validation failures can
 occur before this handler runs and do not perform this cleanup.
 
 The current AI callback returns JSON. It does not redirect to the frontend or
-notify Backend separately. Backend must implement any completion redirect/UI.
+notify Backend separately. Backend already relays the result and redirects to
+its configured NOTION_CONNECT_RESULT_URL. Frontend should re-fetch connections;
+a URL status alone is not proof of ownership or current token validity.
 
 ## 3. List saved connections
 
@@ -160,16 +175,17 @@ GET /integrations/notion/connections?userId=11111111-1111-4111-8111-111111111111
 Authorization: Bearer <AI_SERVICE_TOKEN>
 ```
 
-Required inputs are the same as authorization start. Success is `200 OK` with an
-array of the connection objects above, or `[]` if none exist. There is no
+The service bearer token and query parameter `userId` are required; this GET does
+not accept the authorization-start JSON body as a replacement. Success is
+`200 OK` with an array of the connection objects above, or `[]` if none exist. There is no
 pagination or guaranteed ordering. This reads saved connections without calling
 Notion. Backend can use it to reconcile connection state after browser completion.
 
 ## Backend cookie relay
 
 ```text
-Browser -> Backend: Start connection using the Chat login session
-Backend -> AI: GET /authorize?userId=... with service bearer token
+Browser -> Backend: POST to Backend's connection-start route using the Chat login session
+Backend -> AI: POST /integrations/notion/authorize with JSON userId and service bearer token
 AI -> Backend: authorization_url + Set-Cookie
 Backend -> Browser: authorization_url + each Set-Cookie header
 Browser -> Notion: Navigate to authorization_url and grant access
@@ -180,6 +196,11 @@ AI -> Notion: Exchange code for credentials
 AI -> AI database: Save encrypted credentials linked to user_id
 AI -> Backend -> Browser: Connection result + cookie deletion header
 ```
+
+Backend owns the frontend-facing start route and derives `userId` from its login
+session, not from an untrusted frontend-supplied ID. Its start route uses POST;
+the exact frontend-facing path is defined by Backend. The Notion authorization
+page navigation and browser callback still use GET.
 
 Backend must forward each `Set-Cookie` as a separate response header; do not
 comma-join them. For an HTTPX response and a FastAPI/Starlette browser response,
@@ -216,7 +237,8 @@ code for OAuth exchange failures.
 | Endpoint | HTTP | Meaning |
 | --- | --- | --- |
 | Start / list | 401 | Missing or incorrect service token; `WWW-Authenticate: Bearer`. |
-| Any | 422 | Missing or invalid required query input. |
+| Any | 422 | Missing or invalid required input; authorization start validates its JSON body, other endpoints validate query inputs. |
+| Start | 405 | GET is no longer supported; use POST with JSON userId. |
 | Callback | 400 | Unknown, expired, reused, or browser-mismatched state. |
 | Callback | 400 | Authorization denied/cancelled, or no authorization code. |
 | Callback | 502 | Token exchange failed or the provider response was invalid. |
@@ -238,10 +260,12 @@ authorization URLs containing state.
 
 ## Local setup and verification
 
-Run from `C:\workspace\chat\ai` in CMD. Docker Desktop must be running.
+Run from the repository's `ai` directory in CMD (for example
+`C:\workspaces\chat\ai`). A running PostgreSQL server and pre-created `find_ai`
+database are required. Windows-native PostgreSQL is supported; Docker is optional.
 
 ```bat
-cd C:\workspace\chat\ai
+cd C:\workspaces\chat\ai
 .venv\Scripts\activate
 python -m pip install -e ".[test]"
 ```
@@ -263,15 +287,28 @@ Generate a local key with
 `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
 Keep it local and do not include it in shared logs or screenshots.
 
+For Windows-native PostgreSQL 17, create the database from PowerShell (adjust the
+version to your installation). Enter your database password when prompted:
+
+```powershell
+& 'C:\Program Files\PostgreSQL\17\bin\psql.exe' -h 127.0.0.1 -U postgres -d postgres -c 'CREATE DATABASE find_ai;'
+```
+
+Skip creation if the database exists. Match DATABASE_URL to the actual account,
+password and port; URL-encode special characters in the password. Using 127.0.0.1
+for DB access does not require changing the browser-facing callback hostname.
+Alternatively, run `docker compose up -d --wait db` with Docker Desktop running.
+Do not run both servers on the same host port.
+
 ```bat
-docker compose up -d db
-docker compose ps
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --no-access-log
 ```
 
 Wait for the database to be healthy and `Application startup complete.` in AI's
-console. Startup creates missing AI tables. This runs `app`, not the independent
-`src` implementation. No separate compilation step is required. Inspect
+console. Startup creates missing AI tables, not the database/server itself.
+This runs `app.main:app`. No separate compilation step is required. Disable
+access logs so callback codes/state are not printed. Avoid reload/restart during
+authorization because pending state is in process memory. Inspect
 [Swagger UI](http://localhost:8001/docs) and
 [runtime OpenAPI](http://localhost:8001/openapi.json) for generated schema details.
 
@@ -284,7 +321,8 @@ python -m pytest -q
 Tests use mocked Notion HTTP responses and in-memory SQLite; they do not prove
 live Notion or PostgreSQL integration. For a manual integration check:
 
-1. Start authorization through Backend using a logged-in Chat session.
+1. Start authorization with POST through Backend using a logged-in Chat session.
+   Confirm Backend sends AI a JSON body containing the session-derived `userId`.
 2. Confirm the browser has the HttpOnly OAuth cookie at the callback path.
 3. Open the returned URL in the same browser and authorize selected Notion pages.
 4. Confirm the callback returns connection metadata without tokens and deletes

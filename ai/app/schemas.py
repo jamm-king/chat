@@ -5,6 +5,12 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 
+class AuthorizationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: UUID = Field(alias="userId")
+
+
 class AuthorizationResponse(BaseModel):
     authorization_url: str
 
