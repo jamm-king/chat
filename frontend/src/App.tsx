@@ -3,6 +3,7 @@ import ThemeToggle from "./components/ThemeToggle";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage"
 import ChatPage from "./pages/ChatPage";
+import NotionCallbackPage from "./pages/NotionCallbackPage";
 
 
 export default function App() {
@@ -13,6 +14,8 @@ export default function App() {
       <Route path ="/login" element={<LoginPage/>}/>
       <Route path ="/signup" element={<SignupPage/>}/>
       <Route path="/chat" element={<ChatPage/>}/>
+      <Route path="/notion/callback" element={<NotionCallbackPage/>}/>
+
    </Routes>
   </>);
 }

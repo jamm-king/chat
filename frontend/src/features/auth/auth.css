@@ -13,10 +13,11 @@
   display: grid;
   gap: 14px;
   padding: 32px 28px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-line);
   border-radius: 22px;
   background: var(--card);
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: var(--glass-shadow);
 }
 
 .auth-card h1 {
