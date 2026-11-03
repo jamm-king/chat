@@ -206,6 +206,10 @@ Response `202 Accepted`:
 - `title`: 본문 추출 전에는 `null`이며, 추출 후 노션 페이지 제목으로 채워집니다.
 - `error`: `FAILED`일 때만 `code`, `message`를 포함하고 그 외에는 `null`입니다.
 
+- **현재 동작:** RAG 시스템이 등록 요청 안에서 노션 본문을 바로 가져오므로, 응답 시점에 이미 `status`가 `READY`이고 `title`이 채워져 있을 수 있습니다. 이후 임베딩 처리가 비동기로 바뀌면 위 예시처럼 `REGISTERED`부터 시작합니다. Frontend는 두 경우 모두 아래 Resource Status 규칙대로 처리하면 됩니다.
+- **로딩 표시:** 등록 요청 안에서 노션 API를 호출하므로 응답까지 수 초가 걸릴 수 있습니다. 등록 버튼을 누른 뒤 응답이 올 때까지 로딩 표시가 필요합니다.
+
+
 Error Response:
 
 | Status | Code | 설명 | retryable |
@@ -215,6 +219,9 @@ Error Response:
 | `409` | `RESOURCE_ALREADY_EXISTS` | 이미 등록한 노션 페이지 | `false` |
 | `422` | `VALIDATION_ERROR` | 노션 페이지 주소가 아니거나 페이지 ID를 찾을 수 없음 | `false` |
 | `502` | `RAG_SERVICE_UNAVAILABLE` | RAG 시스템 등록 요청 실패 | `true` |
+- 노션 토큰이 만료되어 다시 연결해야 하는 경우도 `NOTION_NOT_CONNECTED`로 응답합니다.
+- 노션 요청 한도 초과, 응답 지연, 노션 장애는 `RAG_SERVICE_UNAVAILABLE`(`retryable: true`)로 응답합니다.
+
 
 ### 3.1.2 자료 목록 조회 요청
 
@@ -690,6 +697,8 @@ Frontend
 - 자료 등록 요청을 `source.type: NOTION_PAGE`로 변경하고 응답·오류 예시 추가
 - 자료 목록·상세·삭제 응답 형식 추가
 - 역할 구분, 공통 에러 응답, 연동 흐름에 노션 연결 반영
+- 자료 등록이 현재 동기 처리되어 응답 시점에 `READY`일 수 있다는 점과 등록 중 로딩 표시 안내 추가
+
 
 ### v2.0
 
