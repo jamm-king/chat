@@ -13,7 +13,8 @@ export default function ChatPage() {
     const navigate = useNavigate();
     const [text, setText] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
-
+    const [notionError, setNotionError] = useState("")
+    const [ connecting, setConnecting]= useState(false);
     useEffect(() => {
         if (!getAccessToken()) return;
         const load = async () => {
@@ -49,6 +50,26 @@ export default function ChatPage() {
         const answer = response.ok ? data.content : data.error?.message ?? "답변을 받지 못했어요.";
         setMessages((prev) => [...prev, { role: "ASSISTANT", content: answer }]);
     };
+    
+           const connectNotion = async () => {
+        setNotionError("");
+        setConnecting(true);
+        try {
+            const response = await fetch("/api/v1/integrations/notion/authorize", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${getAccessToken()}` },
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                setNotionError(data.error?.message ?? "노션 연결을 시작하지 못했어요.");
+                return;
+            }
+            window.location.href = data.authorizationUrl;
+        } finally {
+            setConnecting(false);
+        }
+    };
+
 
     const logout = async () => {
         try {
@@ -66,7 +87,14 @@ export default function ChatPage() {
     return (
         <div className="chat">
             <aside className="chat-side">
-                <p>자료 목록 자리</p>
+                <div>
+                    <button type="button" className="chat-notion" onClick={connectNotion} disabled={connecting}>
+                        {connecting ? "연결 중…" : "노션 연결"}
+                    </button>
+                    {notionError && <p className="chat-error">{notionError}</p>}
+                    <p>자료 목록 자리</p>
+                </div>
+
                 <button type="button" className="chat-logout" onClick={logout}>로그아웃</button>
             </aside>
             <main className="chat-main">
