@@ -88,6 +88,11 @@ class NotionResourceSummary(BaseModel):
     url: str
     content_status: Literal["complete", "partial"]
     created_at: datetime
+    resource_status: Literal["COLLECTED", "READY"] = "COLLECTED"
+    chunk_count: int = 0
+    indexed_at: datetime | None = None
+    embedding_model: str | None = None
+    embedding_dimensions: int | None = None
 
 
 class NotionResourceResponse(NotionResourceSummary):

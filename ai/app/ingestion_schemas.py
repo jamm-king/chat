@@ -28,9 +28,9 @@ class IngestionResult(BaseModel):
     canonicalUrl: str
     contentStatus: Literal["complete", "partial"]
     referenceCount: int
-    ready: Literal[False] = False
-    chunkCount: Literal[0] = 0
-    indexedAt: None = None
+    ready: bool = False
+    chunkCount: int = Field(default=0, ge=0)
+    indexedAt: datetime | None = None
 
 
 class IngestionJob(BaseModel):
@@ -38,8 +38,8 @@ class IngestionJob(BaseModel):
     userId: UUID
     resourceId: UUID
     operation: Literal["COLLECT", "COLLECT_AND_INDEX"]
-    status: Literal["QUEUED", "EXTRACTING", "EXTRACTED", "SUCCEEDED", "FAILED", "CANCELLED"]
-    resourceStatus: Literal["PROCESSING", "COLLECTED", "FAILED", "DELETED"]
+    status: Literal["QUEUED", "EXTRACTING", "EXTRACTED", "INDEXING", "SUCCEEDED", "FAILED", "CANCELLED"]
+    resourceStatus: Literal["PROCESSING", "COLLECTED", "READY", "FAILED", "DELETED"]
     createdAt: datetime
     startedAt: datetime | None = None
     completedAt: datetime | None = None

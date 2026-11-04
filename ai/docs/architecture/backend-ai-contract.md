@@ -1,6 +1,6 @@
 # Backend–AI 연동 구조와 확정 계약
 
-2026-11-04 · COLLECT 접수·조회와 자료 삭제·작업 취소 구현. 색인·검색은 목표 명세다.
+2026-11-04 · COLLECT 접수·조회와 자료 삭제·작업 취소 구현. COLLECT_AND_INDEX 색인도 구현됐으며 RAG 검색·답변은 목표 명세다.
 
 ## 문서 적용 범위
 
@@ -10,7 +10,7 @@
 - 목표 비동기 API: [API 계약](../api/references.md), [정적 OpenAPI](../api/openapi.json)
 - 현재 구현의 정확한 HTTP 스키마: 실행 중 AI 서버의 `/openapi.json`
 
-정적 OpenAPI는 구현된 COLLECT와 미구현 목표 계약을 함께 표시하며 런타임 OpenAPI와 동일하지 않다. Backend의 프론트 명세와 DB 모델도 아래 상태·입력·ID 정책에 맞춰 후속 변경이 필요하다.
+정적 OpenAPI는 구현된 수집·색인·삭제와 후속 RAG 목표 계약을 함께 표시하며 런타임 OpenAPI와 동일하지 않다. Backend의 프론트 명세와 DB 모델도 아래 상태·입력·ID 정책에 맞춰 후속 변경이 필요하다.
 
 ## 1. 책임과 현재 구현
 
@@ -28,8 +28,9 @@ Frontend는 Backend만 호출한다. `AI_SERVICE_TOKEN`과 Notion 토큰은 Fron
 | 페이지 선택 | AI 검색·미리보기 구현 | Backend 경유 UI 연결 |
 | 수집·저장 | 공통 자료 ID로 COLLECT 비동기 접수·저장, HTTP 202 | 구현됨. 기존 HTTP 201 동기 경로는 deprecated |
 | 작업 API | 메모리 작업 조회·종료 결과 제공 | COLLECT 구현, 재시작 복구 제외 |
-| 청킹·임베딩·RAG 검색 | 미구현 | 색인 공개 후에만 READY |
-| AI 자료 삭제 | 원본·본문·참조 삭제, 진행 수집 취소·늦은 재저장 방지 구현 | 향후 청크·벡터 삭제도 연결 |
+| 청킹·임베딩·벡터 저장 | COLLECT_AND_INDEX 구현 (설정 시 활성화) | 색인 커밋 후에만 READY |
+| RAG 검색·답변 | 미구현 | 다음 구현 단계 |
+| AI 자료 삭제 | 원본·본문·참조·청크·벡터·색인 완료 레코드 삭제 구현 | 수집·색인 중 삭제 시 늦은 결과 공개 방지 |
 
 현재 AI의 `content_status: complete`는 현재 페이지 본문의 API 응답 기준 완전성을 뜻한다. 검색 가능한 상태나 참조 자료 수집 완료를 뜻하지 않는다. `status: connected`도 저장된 연결 표시이며 현재 토큰 유효성을 검사한 결과가 아니다.
 
@@ -72,7 +73,7 @@ Backend는 자료를 PROCESSING으로 만들고 AI에 작업을 요청한다. AI
 | COLLECT | 선택한 한 페이지의 원본·본문·참조 저장 | 작업 SUCCEEDED, 자료 COLLECTED, ready=false |
 | COLLECT_AND_INDEX | 수집 후 청킹·임베딩·색인 공개 | 작업 SUCCEEDED, 자료 READY, ready=true |
 
-현재 COLLECT가 구현돼 있다. 색인 구현 전 COLLECT_AND_INDEX 요청은 `409 OPERATION_NOT_AVAILABLE`로 거절하며 본문 저장만으로 성공 처리하지 않는다.
+현재 COLLECT와 COLLECT_AND_INDEX가 구현돼 있다. 색인 설정 비활성 상태의 COLLECT_AND_INDEX 요청은 `409 OPERATION_NOT_AVAILABLE`로 거절하며 본문 저장만으로 성공 처리하지 않는다.
 
 ### 자료 상태
 
