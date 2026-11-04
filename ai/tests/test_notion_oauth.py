@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.config import Settings
-from app.db import NotionConnection, get_connection
+from app.adapters.outbound.persistence.models import NotionConnection, get_connection
 from app.main import COOKIE_NAME, create_app
-from app.notion_auth import (
+from app.adapters.outbound.notion.auth import (
     NotionOAuthError, OAuthStateStore, consume_state, create_authorization_url,
     decrypt_token, encrypt_token,
 )

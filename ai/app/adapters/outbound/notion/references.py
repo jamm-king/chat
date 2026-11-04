@@ -3,7 +3,7 @@ from html.parser import HTMLParser
 from urllib.parse import unquote, urlsplit
 from uuid import UUID
 
-from app.schemas import NotionReference
+from app.adapters.outbound.notion.models import NotionReference
 
 
 def extract_page_id(url: str) -> UUID | None:

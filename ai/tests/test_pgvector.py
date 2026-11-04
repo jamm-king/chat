@@ -7,7 +7,10 @@ import pytest
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
 
-from app.db import NotionConnection, NotionResource, ResourceChunk, ResourceIndex, init_db
+from app.adapters.outbound.persistence.models import NotionConnection, NotionResource, ResourceChunk, ResourceIndex, init_db
+from app.adapters.outbound.persistence.resources import SqlAlchemyResourceStore
+from app.domain.documents import IndexSpecification, TextDocument
+from sqlalchemy.orm import sessionmaker
 
 
 @pytest.mark.skipif(not os.getenv("AI_TEST_POSTGRES_URL"), reason="Dedicated pgvector database not configured")
@@ -65,4 +68,49 @@ def test_pgvector_storage_transaction_and_deletion():
                 session.delete(session.get(NotionConnection, connection))
                 session.commit()
     finally:
+        engine.dispose()
+
+
+@pytest.mark.skipif(not os.getenv("AI_TEST_POSTGRES_URL"), reason="Dedicated pgvector database not configured")
+def test_resource_store_port_on_postgres():
+    engine = create_engine(os.environ["AI_TEST_POSTGRES_URL"], hide_parameters=True)
+    sessions = sessionmaker(engine, expire_on_commit=False)
+    user, connection, resource, page = (str(uuid4()) for _ in range(4))
+    now = datetime.now(timezone.utc)
+    store = SqlAlchemyResourceStore(sessions)
+    try:
+        store.vector_storage_available = init_db(engine, True)
+        with sessions() as session:
+            session.add(NotionConnection(id=connection, user_id=user, workspace_id=str(uuid4()),
+                                        bot_id=str(uuid4()), access_token_encrypted="test"))
+            session.commit()
+        identity = (user, connection, page, None)
+        document = TextDocument("Example", {
+            "title": "Example", "source": "https://example.com", "page_id": page,
+            "content_status": "complete", "raw_content": "Example", "references": [],
+            "truncated": False, "unknown_block_ids": [], "warnings": [],
+            "last_edited_time": now.isoformat(), "collected_at": now.isoformat(),
+        })
+        store.require_connection(user, connection)
+        store.validate_registration(identity, resource, "COLLECT_AND_INDEX")
+        store.save_snapshot(identity, resource, document)
+        assert store.get(resource).document.page_content == "Example"
+        chunk = TextDocument("Example", {"sequence": 0, "source": "https://example.com"})
+        specification = IndexSpecification("test", 3, 80, 16, "test-v1", now)
+        result = store.publish_index(user, resource, [chunk], [[1.0, 0.5, 0.25]], specification)
+        assert result.ready and result.chunkCount == 1
+        assert store.read(user, resource)["resource_status"] == "READY"
+        assert store.list(user, connection, [], 10, 0)[0]["id"] == resource
+        assert store.list(user, connection, [resource], 10, 0) == []
+        store.delete(user, resource)
+        assert store.get(resource) is None
+        with sessions() as session:
+            assert session.get(ResourceIndex, resource) is None
+            assert session.scalar(select(ResourceChunk).where(ResourceChunk.resource_id == resource)) is None
+    finally:
+        store.delete(user, resource)
+        with sessions() as session:
+            if row := session.get(NotionConnection, connection):
+                session.delete(row)
+                session.commit()
         engine.dispose()

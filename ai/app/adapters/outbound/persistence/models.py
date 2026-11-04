@@ -6,7 +6,7 @@ from pgvector.sqlalchemy import VECTOR
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
-from app.schemas import NotionTokenResponse
+from app.adapters.outbound.notion.models import NotionTokenResponse
 
 
 class Base(DeclarativeBase):

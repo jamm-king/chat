@@ -11,9 +11,9 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.db import NotionConnection, NotionResource
+from app.adapters.outbound.persistence.models import NotionConnection, NotionResource
 from app.main import create_app
-from app.notion_auth import encrypt_token
+from app.adapters.outbound.notion.auth import encrypt_token
 from test_notion_pages import CONNECTION_ID, MARKDOWN, PAGE_ID, USER_ID, markdown_data, page_data
 
 HEADERS = {"Authorization": "Bearer test-service-token-long-enough"}
@@ -183,7 +183,7 @@ def test_retry_uses_new_job_and_preserves_source_identity(ingestion_app):
 
 def test_deadline_prevents_late_fetch_from_saving(ingestion_app, monkeypatch):
     client, _, _, gate, started, engine = ingestion_app
-    import app.ingestion as ingestion
+    import app.adapters.outbound.notion.source as ingestion
     done = threading.Event()
     original = ingestion.load_page
 

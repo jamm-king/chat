@@ -4,6 +4,7 @@ Notion OAuth 연결, 공식 API 페이지 조회, 원본·본문·참조 저장�
 
 | 문서 | 용도 |
 | --- | --- |
+| [헥사고날 코드 구조](docs/architecture/hexagonal.md) | 코어·포트·어댑터 경계와 의존성 조립 |
 | [Backend–AI 연동 구조와 결정](docs/architecture/backend-ai-contract.md) | 역할·공통 ID·자료/작업 상태·참조·삭제 기준 |
 | [현행 Notion OAuth 계약](docs/api/notion-oauth.md) | 구현된 OAuth API와 Backend 쿠키 중계 |
 | [목표 API 계약](docs/api/references.md) | 비동기 수집·색인·검색·삭제 요청/응답 |

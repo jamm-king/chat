@@ -3,12 +3,12 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import SQLAlchemyError
+from app.domain.errors import StorageError
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 
-from app.ingestion import IngestionError, TERMINAL
-from app.ingestion_schemas import IngestionJob, IngestionRequest
+from app.application.use_cases.ingestion import IngestionError, TERMINAL
+from app.application.dto import IngestionJob, IngestionRequest
 
 
 def error_response(request: Request, status: int, code: str, message: str,
@@ -71,7 +71,7 @@ def create_ingestion_router(require_service_token: Callable) -> APIRouter:
             job, created = await run_in_threadpool(request.app.state.ingestions.submit, body)
         except IngestionError as exc:
             return error_response(request, exc.status, exc.code, str(exc), exc.retryable)
-        except SQLAlchemyError:
+        except StorageError:
             return error_response(request, 503, "AI_SERVICE_UNAVAILABLE", "Resource storage is unavailable", True)
         headers = {"Location": f"/internal/v1/ingestions/{job.jobId}?userId={job.userId}"}
         if job.status not in TERMINAL:

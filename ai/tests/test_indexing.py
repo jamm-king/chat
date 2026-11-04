@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from langchain_core.documents import Document
+from app.domain.documents import TextDocument as Document
 from langchain_openai import OpenAIEmbeddings
 from pydantic import SecretStr, ValidationError
 from sqlalchemy import select
@@ -13,9 +13,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateTable
 
-from app.db import NotionResource, ResourceChunk, ResourceIndex
-from app.embeddings import EmbeddingError, OpenAIEmbeddingClient, validate_vectors
-from app.indexing import DocumentIndexer
+from app.adapters.outbound.persistence.models import NotionResource, ResourceChunk, ResourceIndex
+from app.adapters.outbound.langchain.embeddings import EmbeddingError, OpenAIEmbeddingClient, validate_vectors
+from app.application.use_cases.indexing import DocumentIndexer
+from app.adapters.outbound.langchain.chunking import LangChainTextChunker
 from test_ingestions import HEADERS, body, finished, ingestion_app, poll, submit
 from test_notion_pages import USER_ID
 from test_resource_lifecycle import delete, read
@@ -51,7 +52,7 @@ def indexed_app(ingestion_app):
     settings.chunk_size, settings.chunk_overlap = 80, 16
     settings.ingestion_timeout_seconds = 2
     embeddings = FakeEmbeddings()
-    client.app.state.ingestions.indexer = DocumentIndexer(settings, embeddings)
+    client.app.state.ingestions.indexer = DocumentIndexer(settings, embeddings, LangChainTextChunker(settings.chunk_size, settings.chunk_overlap))
     try:
         yield client, state, calls, embeddings, engine
     finally:
