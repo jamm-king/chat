@@ -5,16 +5,13 @@
   height: 100vh;
   padding: 20px;
   box-sizing: border-box;
-  /* 대화 화면은 글을 오래 읽는 곳이라 섞인 색 바탕을 덮고 단색으로 깔끔하게 둔다 */
-  background: var(--bg);
 }
 
 .chat-side,
 .chat-main {
-  border: 1px solid var(--chat-line);
+  border: 1px solid var(--line);
   border-radius: 22px;
-  background: var(--chat-card);
-  box-shadow: var(--chat-shadow);
+  background: var(--card);
 }
 
 .chat-side {

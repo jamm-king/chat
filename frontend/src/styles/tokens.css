@@ -6,18 +6,9 @@
     --accent: #9d2cff; /*찾 프로젝트 메인 컬러: 네온 퍼플*/
     --accent-soft: #f1e6ff;
     --line: #eee8f7;
-    --card: rgba(255, 255, 255, 0.38);
+    --card: rgba(255, 255, 255, 0.72);
     --on-accent: #ffffff;
     --danger: #c62828;
-    --danger-soft: #fdecec;
-    --glass-line: rgba(255, 255, 255, 0.6);
-    --glass-shadow: 0 20px 50px rgba(60, 20, 110, 0.12);
-    --glow-1: rgba(168, 110, 255, 0.6);
-    --glow-2: rgba(255, 140, 200, 0.5);
-    --glow-3: rgba(110, 190, 230, 0.45);
-    --chat-card: rgba(255, 255, 255, 0.75);
-    --chat-line: rgba(157, 44, 255, 0.08);
-    --chat-shadow: 0 10px 30px rgba(60, 20, 110, 0.06);
 }
 :root[data-theme="dark"]{
     --bg: #09060f;
@@ -26,58 +17,22 @@
     --accent: #c45cff;
     --accent-soft: rgba(196, 92, 255, 0.25);
     --line: rgba(190,80,255,0.3);
-    --card: rgba(22, 12, 40, 0.32);
+    --card: rgba(14,8 ,26, 0.82);
     --on-accent: #12051f;
     --danger: #ff8a80;
-    --danger-soft: rgba(255, 138, 128, 0.15);
-    --glass-line: rgba(255, 255, 255, 0.09);
-    --glass-shadow: 0 0 40px rgba(196, 92, 255, 0.12);
-    --glow-1: rgba(157, 44, 255, 0.45);
-    --glow-2: rgba(255, 60, 170, 0.25);
-    --glow-3: rgba(40, 140, 200, 0.25);
-    --chat-card: rgba(255, 255, 255, 0.03);
-    --chat-line: rgba(255, 255, 255, 0.08);
-    --chat-shadow: none;
 }
 
-/* 유리 카드가 비치도록 바탕에 섞인 색을 깔고, 스크롤해도 움직이지 않게 고정한다 */
 body{
     margin: 0;
-    min-height: 100vh;
-    background:
-        radial-gradient(38% 45% at 30% 30%, var(--glow-1), transparent 70%),
-        radial-gradient(34% 42% at 72% 42%, var(--glow-2), transparent 70%),
-        radial-gradient(45% 45% at 50% 95%, var(--glow-3), transparent 70%),
-        var(--bg);
-    background-attachment: fixed;
+    background: var(--bg);
     color: var(--text);
-    font-family: Pretendard, "Malgun Gothic", sans-serif;
 }
 
 h1 {
     color: var(--accent);
 }
-/* 대화 화면 오른쪽 카드의 머리줄 안에 들어가도록 위치를 맞췄다 (카드 바깥 여백 20px + 머리줄 안쪽 여백 24px) */
 .theme-toggle {
   position: fixed;
-  top: 32px;
-  right: 44px;
-  z-index: 10;
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: var(--card);
-  backdrop-filter: blur(16px) saturate(160%);
-  color: var(--accent);
-  cursor: pointer;
-  box-shadow: var(--glass-shadow);
-}
-
-:root[data-theme="dark"] .theme-toggle {
-  border-color: var(--accent);
-  box-shadow: 0 0 12px rgba(196, 92, 255, 0.45);
+  top: 16px;
+  right: 16px;
 }
