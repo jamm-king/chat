@@ -21,8 +21,13 @@ def error_response(request: Request, status: int, code: str, message: str,
     )
 
 
-async def ingestion_headers(request: Request, call_next):
-    if not request.url.path.startswith("/internal/v1/ingestions"):
+def is_internal_request(request: Request) -> bool:
+    return any(request.url.path == prefix or request.url.path.startswith(prefix + "/")
+               for prefix in ("/internal/v1/ingestions", "/internal/v1/resources"))
+
+
+async def internal_headers(request: Request, call_next):
+    if not is_internal_request(request):
         return await call_next(request)
     request.state.request_id = str(uuid4())
     if supplied := request.headers.get("X-Request-Id"):
@@ -42,11 +47,11 @@ async def ingestion_headers(request: Request, call_next):
             return error_response(request, 415, "UNSUPPORTED_MEDIA_TYPE", "Content-Type must be application/json")
         if request.query_params:
             return error_response(request, 400, "INVALID_REQUEST", "POST inputs must be in the JSON body")
-    elif request.method == "GET":
+    elif request.method in {"GET", "DELETE"}:
         if any(key != "userId" for key in request.query_params) or len(request.query_params.getlist("userId")) > 1:
             return error_response(request, 400, "INVALID_REQUEST", "Only one userId query parameter is allowed")
         if await request.body():
-            return error_response(request, 400, "INVALID_REQUEST", "GET does not accept a body")
+            return error_response(request, 400, "INVALID_REQUEST", "GET/DELETE do not accept a body")
     try:
         response = await call_next(request)
     except Exception:

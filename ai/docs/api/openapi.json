@@ -3,7 +3,7 @@
   "info": {
     "title": "AI Service Internal API",
     "version": "2.0.0",
-    "description": "COLLECT 비동기 접수·조회 구현. COLLECT_AND_INDEX·검색·답변·삭제는 목표 계약·미구현. Backend 공통 resourceId, COLLECTED/READY 구분. 현행 OAuth·동기 API는 런타임 OpenAPI와 notion-oauth.md 참조."
+    "description": "COLLECT 비동기 접수·조회와 사용자별 자료 삭제·진행 작업 취소 구현. COLLECT_AND_INDEX·검색·답변은 목표 계약·미구현. Backend 공통 resourceId와 COLLECTED/READY 구분. 삭제 표시는 단일 프로세스 메모리이며 영속 복구는 제외."
   },
   "servers": [
     {
@@ -294,8 +294,8 @@
         "tags": [
           "Resources"
         ],
-        "summary": "자료 검색 차단 및 AI 저장 데이터 삭제 (목표)",
-        "description": "사용자 범위로 진행 작업 취소·검색 차단 후 원본·본문·참조·청크·벡터 삭제, 204. 반복 삭제도 204. 부모 삭제는 자식 자동 삭제 없이 부모 관계 해제. 늦은 완료로 재공개 금지. Backend는 검색 제외와 과거 출처 스냅샷 보존. 실패 503/504이며 삭제 완료로 표시하지 않는다. 현재 런타임에는 미구현.",
+        "summary": "자료 삭제 및 진행 중 수집 작업 취소",
+        "description": "사용자 범위의 원본·본문·참조 행 삭제 후 204. 반복·없는 자료·다른 사용자 자료에도 204이며 타 사용자 데이터는 변경하지 않는다. 진행 작업은 CANCELLED/DELETED, RESOURCE_DELETED. 수집 완료와 삭제를 직렬화해 재저장 방지. 자식은 유지·부모 연결 해제. 물리 삭제 실패는 503, 10초 초과는 504이며 메모리 제외 유지. 성공/실패로 이미 끝난 작업은 과거 결과로 유지한다. 현재 청크·벡터·RAG 검색은 미구현. 재시작 후 메모리 삭제 이력 유실, Backend는 DELETED 제외 유지. references.md 참조.",
         "parameters": [
           {
             "name": "resourceId",
@@ -349,7 +349,8 @@
           "504": {
             "$ref": "#/components/responses/ServiceTimeout"
           }
-        }
+        },
+        "x-implementation-status": "implemented-current-storage"
       }
     },
     "/internal/v1/retrieval/search": {
@@ -637,7 +638,9 @@
                   "RESOURCE_ID_CONFLICT",
                   "INVALID_PARENT_REFERENCE",
                   "CONNECTION_NOT_FOUND",
-                  "REQUEST_TOO_LARGE"
+                  "REQUEST_TOO_LARGE",
+                  "RESOURCE_DELETE_FAILED",
+                  "RESOURCE_DELETE_TIMEOUT"
                 ]
               },
               "message": {
@@ -1875,5 +1878,5 @@
     "description": "호출 방법과 정책 설명",
     "url": "./references.md"
   },
-  "x-implementation-status": "partial-collect-implemented"
+  "x-implementation-status": "collect-and-resource-deletion-implemented"
 }

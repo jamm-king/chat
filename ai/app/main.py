@@ -20,9 +20,10 @@ from starlette.concurrency import run_in_threadpool
 
 from app.config import Settings
 from app.ingestion import IngestionManager
-from app.ingestion_api import create_ingestion_router, error_response, ingestion_headers
-from app.db import NotionConnection, NotionResource, get_connection, init_db, save_connection
-from app.resources import get_resource, register_resource
+from app.ingestion_api import create_ingestion_router, error_response, internal_headers, is_internal_request
+from app.resource_api import create_resource_router
+from app.db import NotionConnection, get_connection, init_db, save_connection
+from app.resources import register_resource
 from app.loader import load_page, summarize_page
 from app.notion_client import NotionApiError, NotionClient
 from app.notion_auth import (
@@ -67,12 +68,13 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
                 db_engine.dispose()
 
     app = FastAPI(title="찾", lifespan=lifespan)
-    app.middleware("http")(ingestion_headers)
+    app.middleware("http")(internal_headers)
 
     @app.exception_handler(StarletteHTTPException)
     async def handle_http_error(request: Request, exc: StarletteHTTPException):
-        if request.url.path.startswith("/internal/v1/ingestions"):
-            code = {401: "UNAUTHORIZED", 404: "JOB_NOT_FOUND"}.get(exc.status_code, "INVALID_REQUEST")
+        if is_internal_request(request):
+            missing = "JOB_NOT_FOUND" if "/ingestions" in request.url.path else "RESOURCE_NOT_FOUND"
+            code = {401: "UNAUTHORIZED", 404: missing}.get(exc.status_code, "INVALID_REQUEST")
             response = error_response(request, exc.status_code, code, "Request is not authorized" if exc.status_code == 401 else str(exc.detail))
             if exc.headers:
                 response.headers.update(exc.headers)
@@ -81,9 +83,9 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(request: Request, exc: RequestValidationError):
-        if request.url.path.startswith("/internal/v1/ingestions"):
+        if is_internal_request(request):
             details = [{"field": ".".join(map(str, item["loc"])), "reason": item["type"]} for item in exc.errors()]
-            return error_response(request, 400, "INVALID_REQUEST", "Invalid ingestion request", details=details)
+            return error_response(request, 400, "INVALID_REQUEST", "Invalid internal API request", details=details)
         return await request_validation_exception_handler(request, exc)
 
     @app.exception_handler(NotionApiError)
@@ -107,6 +109,7 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
             raise HTTPException(401, "Invalid service token", headers={"WWW-Authenticate": "Bearer"})
 
     app.include_router(create_ingestion_router(require_service_token))
+    app.include_router(create_resource_router(require_service_token))
 
     def get_notion_client(
         request: Request, connection_id: UUID,
@@ -167,9 +170,11 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
         user_id: Annotated[UUID, Query(alias="userId")],
         client: Annotated[NotionClient, Depends(get_notion_client)],
     ):
+        request.app.state.ingestions.validate_legacy_registration(str(user_id), body.parent_resource_id)
         try:
             with request.app.state.sessions() as session:
-                output = register_resource(session, client, str(user_id), str(connection_id), body)
+                output = register_resource(session, client, str(user_id), str(connection_id), body,
+                                           persist=request.app.state.ingestions.persist_legacy_resource)
         except SQLAlchemyError:
             raise HTTPException(503, "Resource storage is unavailable") from None
         return JSONResponse(output.model_dump(mode="json"), status_code=201,
@@ -185,12 +190,7 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
         offset: Annotated[int, Query(ge=0)] = 0,
     ):
         try:
-            with request.app.state.sessions() as session:
-                resources = session.scalars(select(NotionResource).where(
-                    NotionResource.user_id == str(user_id),
-                    NotionResource.connection_id == str(connection_id),
-                ).order_by(NotionResource.created_at, NotionResource.id).limit(limit).offset(offset)).all()
-                output = [NotionResourceSummary.model_validate(item).model_dump(mode="json") for item in resources]
+            output = request.app.state.ingestions.list_resources(str(user_id), str(connection_id), limit, offset)
         except SQLAlchemyError:
             raise HTTPException(503, "Resource storage is unavailable") from None
         return JSONResponse(output, headers={"Cache-Control": "no-store"})
@@ -200,8 +200,7 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
     def read_resource(request: Request, resource_id: UUID,
                       user_id: Annotated[UUID, Query(alias="userId")]):
         try:
-            with request.app.state.sessions() as session:
-                output = NotionResourceResponse.model_validate(get_resource(session, str(user_id), str(resource_id)))
+            output = request.app.state.ingestions.read_resource(str(user_id), str(resource_id))
         except SQLAlchemyError:
             raise HTTPException(503, "Resource storage is unavailable") from None
         return JSONResponse(output.model_dump(mode="json"), headers={"Cache-Control": "no-store"})

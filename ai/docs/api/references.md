@@ -1,8 +1,8 @@
 # Backend → AI API 목표 계약
 
-2026-11-04 · API 명세 v2.0.0 · **COLLECT 비동기 접수·조회 구현, 색인·삭제·검색 미구현**
+2026-11-04 · API 명세 v2.0.0 · **COLLECT 비동기 접수·조회·자료 삭제 구현, 색인·검색 미구현**
 
-기준 결정은 [Backend–AI 연동 구조](../architecture/backend-ai-contract.md)다. 현재 OAuth는 [현행 OAuth 계약](notion-oauth.md), 현재 동기 페이지 조회·저장은 실행 중 `/openapi.json`을 따른다. 이 문서와 [정적 OpenAPI](openapi.json)는 현재 COLLECT와 후속 목표 계약을 함께 기술한다. 실제 구현 목록은 런타임 스키마로 확인한다. 2026-10-29의 공개 URL 스크래핑 계약은 이 문서로 대체한다.
+기준 결정은 [Backend–AI 연동 구조](../architecture/backend-ai-contract.md)다. 현재 OAuth는 [현행 OAuth 계약](notion-oauth.md), 현재 동기 페이지 조회·저장은 실행 중 `/openapi.json`을 따른다. 이 문서와 [정적 OpenAPI](openapi.json)는 현재 COLLECT·자료 삭제와 후속 목표 계약을 함께 기술한다. 실제 구현 목록은 런타임 스키마로 확인한다. 2026-10-29의 공개 URL 스크래핑 계약은 이 문서로 대체한다.
 
 v2.0.0은 정적 계약 문서의 버전이다. 목표 경로는 `/internal/v1`을 유지하며, 배포된 API의 호환성을 확인했다는 의미는 아니다.
 
@@ -199,6 +199,18 @@ Backend는 먼저 DELETED로 표시하고 검색 요청 범위에서 제외한�
 
 AI 삭제가 실패하면 503, 기한 초과면 504다. Backend는 검색 제외를 유지하고 AI 데이터 삭제 미완료를 기록한다. 소프트 삭제만 수행한 상태를 AI 물리 삭제 완료로 표시하지 않는다. 검색·답변 응답 직전 자료 범위가 바뀌면 `409 RESOURCE_SCOPE_CHANGED`이며 Backend도 저장·반환 전 재검증한다.
 
+### 현재 삭제 구현과 제약
+
+삭제 API는 구현돼 있다. 현재 저장된 원본·본문·참조는 한 자료 행에 있으므로 해당 행을 삭제한다. 아직 청크·임베딩·RAG 검색이 없으므로 그 데이터 삭제는 색인 구현 시 연결한다. Notion 원문을 수정·삭제하는 API는 호출하지 않는다.
+
+- 진행 중인 해당 사용자·자료 작업은 CANCELLED, resourceStatus=DELETED, error.code=RESOURCE_DELETED, retryable=false가 된다. 이미 전송한 Notion HTTP 요청을 강제 중단하지는 않지만 늦게 돌아온 결과는 저장하지 않는다.
+- 동일 자료의 수집 완료 반영과 삭제는 같은 잠금으로 조율한다. 삭제가 먼저면 저장하지 않고, 저장이 먼저면 저장 행을 삭제한다.
+- SUCCEEDED/FAILED 등 이미 종료한 작업은 과거 스냅샷으로 유지한다. 과거 SUCCEEDED의 COLLECTED를 현재 자료 상태로 덮어쓰지 않도록 Backend의 DELETED를 우선한다.
+- 삭제한 자료 ID의 새 수집 접수는 409 RESOURCE_DELETED다. 기존 CANCELLED 작업의 정확한 재요청은 200/CANCELLED다. 삭제 후 같은 원본을 사용자가 다시 등록하려면 새 resourceId·jobId를 사용한다.
+- 자식 자료는 유지하고 parentResourceId를 null로 해제한다. 부모 삭제 전에 이미 접수한 자식도 독립 자료로 완료할 수 있다. 삭제한 부모에 새 자식 등록은 거절한다.
+- 원본·본문·참조 행 삭제 실패는 503 RESOURCE_DELETE_FAILED, 처리 기한 초과는 504 RESOURCE_DELETE_TIMEOUT이다. 성공으로 숨기지 않고 재시도 가능 여부를 반환한다. 요청의 현재 프로세스 내 제외 표시는 유지하며 기존 자료 목록·조회에서도 제외한다.
+- 삭제 이력은 메모리이며 재시작·다중 프로세스에 걸친 제외 보장은 없다. 성공한 물리 삭제는 DB에 남지 않지만, 삭제 실패 후 재시작하면 남은 행을 AI가 다시 읽을 수 있다. Backend는 DELETED 상태를 유지하고 자료를 요청 범위에서 제외한 뒤 명시적으로 삭제를 재시도한다. 영속 삭제 이력·자동 복구는 후속이다.
+
 ## 5. 오류·호환성과 구현 순서
 
 목표 API 오류는 `{error: {code, message, retryable, details}, requestId}`다. 현재 OAuth는 detail 형식이므로 같은 형식이라고 가정하지 않는다. Notion 401은 NOTION_REAUTHORIZATION_REQUIRED, 403은 NOTION_ACCESS_DENIED, 404는 NOTION_PAGE_NOT_FOUND로 분류한다. 404는 삭제와 미공유를 구분할 수 없음을 안내한다. 공급자 오류 본문·토큰·코드·쿠키는 로그나 응답에 노출하지 않는다.
@@ -212,6 +224,6 @@ AI 삭제가 실패하면 503, 기한 초과면 504다. Backend는 검색 제외
 
 retryable은 사용자가 다시 시도할 수 있다는 정보이며 자동 재시도 지시가 아니다. Retry-After는 폴링·사용자 재시도 대기 시간이다. requestId는 멱등성 키가 아니다.
 
-현재 POST `/internal/v1/ingestions`와 GET 작업 조회는 COLLECT에 대해 구현됐다. 기존 동기 POST `/integrations/notion/connections/{connection_id}/resources`는 호환용 deprecated API이며 자체 자료 ID를 발급하므로 신규 통합에 사용하지 않는다. 기존 자료 ID는 자동 변경하지 않으며 Backend ID 이관은 별도 작업이다. 다음 단계는 삭제·작업 취소다. 검색·색인은 이후 COLLECT_AND_INDEX와 함께 활성화한다. 기존 Backend REGISTERED/EXTRACTING/INDEXING/READY 상태 및 URL 입력 명세도 기준 문서의 새 자료/작업 상태와 연결·페이지 선택 입력으로 변경해야 한다.
+현재 POST `/internal/v1/ingestions`와 GET 작업 조회는 COLLECT에 대해 구현됐다. 기존 동기 POST `/integrations/notion/connections/{connection_id}/resources`는 호환용 deprecated API이며 자체 자료 ID를 발급하므로 신규 통합에 사용하지 않는다. 기존 자료 ID는 자동 변경하지 않으며 Backend ID 이관은 별도 작업이다. 자료 삭제·진행 수집 취소도 구현됐다. 다음 단계는 청킹·임베딩·색인이다. 검색·색인은 이후 COLLECT_AND_INDEX와 함께 활성화한다. 기존 Backend REGISTERED/EXTRACTING/INDEXING/READY 상태 및 URL 입력 명세도 기준 문서의 새 자료/작업 상태와 연결·페이지 선택 입력으로 변경해야 한다.
 
 영속 큐·자동 복구·자동 동기화·파일·일반 웹페이지 지원은 후속 범위다. 기존 공개 URL/HTML 수집 명세를 현재 OAuth 경로와 병행 적용하지 않는다.
