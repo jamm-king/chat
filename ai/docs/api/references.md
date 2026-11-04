@@ -1,22 +1,24 @@
-# Backend → AI API 목표 계약
+# Backend → AI API 계약
 
-2026-11-03 · 목표 명세 v2.0.0 · **현재 런타임에 아직 구현되지 않은 비동기 수집·색인·삭제·검색 계약**
+2026-11-04 · API 명세 v2.0.0 · **COLLECT·COLLECT_AND_INDEX·자료 삭제·RAG 검색·답변 구현**
 
-기준 결정은 [Backend–AI 연동 구조](../architecture/backend-ai-contract.md)다. 현재 OAuth는 [현행 OAuth 계약](notion-oauth.md), 현재 동기 페이지 조회·저장은 실행 중 `/openapi.json`을 따른다. 이 문서와 [정적 OpenAPI](openapi.json)는 목표 계약이며 현재 서버의 구현 목록이 아니다. 2026-10-29의 공개 URL 스크래핑 계약은 이 문서로 대체한다.
+기준 결정은 [Backend–AI 연동 구조](../architecture/backend-ai-contract.md)다. 현재 OAuth는 [현행 OAuth 계약](notion-oauth.md), 현재 동기 페이지 조회·저장은 실행 중 `/openapi.json`을 따른다. 이 문서와 [정적 OpenAPI](openapi.json)는 현재 수집·색인·자료 삭제·RAG 계약을 함께 기술한다. 구현된 경로·자료형은 런타임 스키마로 확인한다. 수동 JSONResponse의 오류 코드·응답 헤더와 상태 전이는 이 문서를 함께 따른다. 2026-10-29의 공개 URL 스크래핑 계약은 이 문서로 대체한다.
 
-v2.0.0은 정적 계약 문서의 버전이다. 목표 경로는 `/internal/v1`을 유지하며, 배포된 API의 호환성을 확인했다는 의미는 아니다.
+v2.0.0은 정적 계약 문서의 버전이다. 내부 경로는 `/internal/v1`을 유지하며, 배포된 API의 호환성을 확인했다는 의미는 아니다.
 
 ## 공통 규칙
+
+FastAPI 런타임 스키마는 기본 검증 응답을 422로 표시할 수 있으나 `/internal/v1`의 아래 API는 실제 검증 실패를 400 INVALID_REQUEST로 변환한다. OAuth·기존 Notion 페이지/자료 API의 검증 실패는 422다.
 
 - 로컬 AI 주소: `http://localhost:8001`.
 - Backend가 사용자 인증 후 `Authorization: Bearer <AI_SERVICE_TOKEN>`으로 호출한다. OAuth 콜백은 이 서비스 토큰 대상이 아니다.
 - userId는 Backend 로그인 사용자이며 AI도 연결·자료·색인을 사용자 범위로 제한한다.
-- ID는 UUID, 시간은 UTC RFC 3339, JSON은 UTF-8. 목표 API 필드명은 camelCase다. 현행 OAuth·페이지 API 응답의 snake_case는 별도 계약이다.
+- ID는 UUID, 시간은 UTC RFC 3339, JSON은 UTF-8. 내부 API 필드명은 camelCase다. 현행 OAuth·페이지 API 응답의 snake_case는 별도 계약이다.
 - POST 본문은 최대 256 KiB이며 알 수 없는 필드를 거절한다. GET·DELETE에는 본문이 없다.
 - 선택 UUID 헤더 X-Request-Id는 요청 추적용이며 멱등성을 보장하지 않는다. 미지정 시 생성하고 잘못된 형식은 400이다. 응답에는 실제 ID와 `Cache-Control: no-store`를 포함한다.
 - resourceId와 jobId는 Backend가 발급한다. 별도 ai_resource_id는 도입하지 않는다.
 
-| Method | 목표 경로 | 정상 응답 |
+| Method | 경로 | 정상 응답 |
 | --- | --- | --- |
 | POST | `/internal/v1/ingestions` | 신규 202, 동일 작업 200 |
 | GET | `/internal/v1/ingestions/{jobId}?userId={userId}` | 200 |
@@ -48,7 +50,7 @@ AI는 최소 입력·연결 소유권·작업 및 자료 ID 충돌을 검사한 
 
 - COLLECT: 원본·본문·참조 저장. 정상 완료는 작업 SUCCEEDED, 자료 COLLECTED, result.ready=false.
 - COLLECT_AND_INDEX: 수집·청킹·임베딩·색인 공개. 정상 완료는 작업 SUCCEEDED, 자료 READY, result.ready=true.
-- 색인 기능 미구현 시 COLLECT_AND_INDEX는 `409 OPERATION_NOT_AVAILABLE`로 접수 거절한다. 요청을 COLLECT로 낮춰 처리하지 않는다.
+- 색인 설정 비활성 시 COLLECT_AND_INDEX는 `409 OPERATION_NOT_AVAILABLE`로 접수 거절한다. 요청을 COLLECT로 낮춰 처리하지 않는다.
 - 같은 jobId·같은 입력은 메모리에 있는 현재 작업을 200으로 반환하며 재실행하지 않는다. 다른 입력으로 같은 jobId를 쓰면 `409 JOB_ID_CONFLICT`다. UUID는 정규화하고 누락 parentResourceId는 null로 비교한다.
 - 같은 자료의 동시 작업은 `409 INGESTION_IN_PROGRESS`다. 기존 resourceId의 userId·connectionId·pageId·부모를 바꿀 수 없다. 다른 원본을 등록하려면 새 resourceId를 사용한다.
 - 이미 수집된 자료의 중복 COLLECT는 `409 RESOURCE_ALREADY_COLLECTED`, 준비된 자료는 `409 RESOURCE_ALREADY_INDEXED`다.
@@ -102,7 +104,7 @@ error는 실패·취소 시 code, message, retryable을 제공한다. 작업 실
 
 ### 최소 실행 정책
 
-초기 구현은 단일 AI 프로세스의 비동기 실행·메모리 작업 상태를 허용한다. 진행 작업은 현재 프로세스 실행 중 접수 후 10분 내 종료한다. 자동 재시도·백오프·별도 워커·영속 큐·재시작 복구는 제외한다. 진행 중에는 Retry-After: 2를 제공하며 Backend는 2~10초 간격으로 조회한다.
+초기 구현은 단일 AI 프로세스의 비동기 실행·메모리 작업 상태를 허용한다. 작업 기한은 INGESTION_TIMEOUT_SECONDS(기본 600초, 설정 상한 600초)다. 수집·청킹·임베딩은 남은 기한으로 제한하고 저장 직전에도 확인한다. 최종 DB 저장은 별도 강제 타임아웃으로 감싸지 않으므로 DB 지연 중 무조건 10분 안에 종료한다고 보장하지 않는다. 자동 재시도·백오프·별도 워커·영속 큐·재시작 복구는 제외한다. 진행 중에는 Retry-After: 2를 제공하며 Backend는 2~10초 간격으로 조회한다.
 
 프로세스 재시작 후 없는 작업은 `404 JOB_NOT_FOUND`다. Backend는 작업 유실을 기록하고 폴링을 중단하며 자동 재접수하지 않는다. 연결·완료된 자료는 DB에 남는다. 사용자 재시도 전 자료의 남은 상태를 대조하고 중복 등록하지 않는다. 재시작 후 자동 복구·장기 작업 보존을 보장하지 않는다.
 
@@ -185,7 +187,7 @@ error는 실패·취소 시 code, message, retryable을 제공한다. 작업 실
 
 `content`는 최대 16,000자 Markdown이며 초과 시 문장 경계에서 축약하고 참조를 맞춘다. 출처는 최대 10개다. 본문의 `[1]`은 출처의 `citationId: "1"`과 대응하고 ID는 1부터 연속된다. 같은 청크는 같은 ID를 사용하며 본문 참조와 출처가 양방향으로 일치해야 한다. `excerpt`는 실제 청크에 존재하는 1~1,000자 연속 텍스트다. 구조 검증 실패는 `502 AI_PROVIDER_ERROR`로 반환하며 LLM 재호출로 자동 복구하지 않는다.
 
-검색 결과·출처의 `locator`는 `type: URL`, 최종 원문 `url`, 절 제목 `section`으로 구성한다. 제목·절 제목은 최대 500자이며 없으면 `null`이다. URL은 최대 2,048자, 검색 청크 content는 최대 8,000자다. 정확한 문단 이동과 현재 웹페이지의 과거 내용 일치는 보장하지 않는다.
+검색 결과·출처의 `locator`는 `type: URL`, 최종 원문 `url`, 절 제목 `section`으로 구성한다. 현재 청커는 절 제목을 별도로 추출하지 않으므로 현재 파이프라인의 section은 null이다. 제목·절 제목은 최대 500자이며 없으면 `null`이다. URL은 최대 2,048자, 검색 청크 content는 최대 8,000자다. 정확한 문단 이동과 현재 웹페이지의 과거 내용 일치는 보장하지 않는다.
 
 AI는 대화를 저장하지 않는다. Backend가 답변·출처 스냅샷을 함께 저장하고 안전한 Markdown으로 표시한다. `answerId`는 생성 결과 식별자이며 조회 API·멱등성 기능은 없다. Backend는 사용자별 활성 생성을 하나로 제한하고 대화 초기화 전의 늦은 답변을 버린다.
 
@@ -199,19 +201,34 @@ Backend는 먼저 DELETED로 표시하고 검색 요청 범위에서 제외한�
 
 AI 삭제가 실패하면 503, 기한 초과면 504다. Backend는 검색 제외를 유지하고 AI 데이터 삭제 미완료를 기록한다. 소프트 삭제만 수행한 상태를 AI 물리 삭제 완료로 표시하지 않는다. 검색·답변 응답 직전 자료 범위가 바뀌면 `409 RESOURCE_SCOPE_CHANGED`이며 Backend도 저장·반환 전 재검증한다.
 
-## 5. 오류·호환성과 구현 순서
+### 현재 삭제 구현과 제약
 
-목표 API 오류는 `{error: {code, message, retryable, details}, requestId}`다. 현재 OAuth는 detail 형식이므로 같은 형식이라고 가정하지 않는다. Notion 401은 NOTION_REAUTHORIZATION_REQUIRED, 403은 NOTION_ACCESS_DENIED, 404는 NOTION_PAGE_NOT_FOUND로 분류한다. 404는 삭제와 미공유를 구분할 수 없음을 안내한다. 공급자 오류 본문·토큰·코드·쿠키는 로그나 응답에 노출하지 않는다.
+삭제 API는 구현돼 있다. 현재 저장된 원본·본문·참조는 한 자료 행에 있으므로 해당 행을 삭제한다. 청크·벡터·색인 완료 레코드도 같은 삭제 트랜잭션으로 제거한다. RAG 검색·답변에서도 삭제 제외와 응답 직전 범위 재검증을 적용한다. Notion 원문을 수정·삭제하는 API는 호출하지 않는다.
 
-| 단계 | AI 기한 | Backend 읽기 타임아웃 |
+- 진행 중인 해당 사용자·자료 작업은 CANCELLED, resourceStatus=DELETED, error.code=RESOURCE_DELETED, retryable=false가 된다. 이미 전송한 Notion HTTP 요청을 강제 중단하지는 않지만 늦게 돌아온 결과는 저장하지 않는다.
+- 동일 자료의 수집 완료 반영과 삭제는 같은 잠금으로 조율한다. 삭제가 먼저면 저장하지 않고, 저장이 먼저면 저장 행을 삭제한다.
+- SUCCEEDED/FAILED 등 이미 종료한 작업은 과거 스냅샷으로 유지한다. 과거 SUCCEEDED의 COLLECTED를 현재 자료 상태로 덮어쓰지 않도록 Backend의 DELETED를 우선한다.
+- 삭제한 자료 ID의 새 수집 접수는 409 RESOURCE_DELETED다. 기존 CANCELLED 작업의 정확한 재요청은 200/CANCELLED다. 삭제 후 같은 원본을 사용자가 다시 등록하려면 새 resourceId·jobId를 사용한다.
+- 자식 자료는 유지하고 parentResourceId를 null로 해제한다. 부모 삭제 전에 이미 접수한 자식도 독립 자료로 완료할 수 있다. 삭제한 부모에 새 자식 등록은 거절한다.
+- 원본·본문·참조 행 삭제 실패는 503 RESOURCE_DELETE_FAILED, 처리 기한 초과는 504 RESOURCE_DELETE_TIMEOUT이다. 성공으로 숨기지 않고 재시도 가능 여부를 반환한다. 요청의 현재 프로세스 내 제외 표시는 유지하며 기존 자료 목록·조회에서도 제외한다.
+- 삭제 이력은 메모리이며 재시작·다중 프로세스에 걸친 제외 보장은 없다. 성공한 물리 삭제는 DB에 남지 않지만, 삭제 실패 후 재시작하면 남은 행을 AI가 다시 읽을 수 있다. Backend는 DELETED 상태를 유지하고 자료를 요청 범위에서 제외한 뒤 명시적으로 삭제를 재시도한다. 영속 삭제 이력·자동 복구는 후속이다.
+
+## 5. 오류·호환성과 실행 제한
+
+내부 API 오류는 `{error: {code, message, retryable, details}, requestId}`다. OAuth는 detail 형식이다. 기존 Notion 페이지·자료 API의 입력·저장 오류도 detail을 사용하지만 Notion 공급자 오류는 `{error: {code, message}}`이며 requestId·retryable이 없다. 동일 envelope라고 가정하지 않는다. Notion 401은 NOTION_REAUTHORIZATION_REQUIRED, 403은 NOTION_ACCESS_DENIED, 404는 NOTION_PAGE_NOT_FOUND로 분류한다. 404는 삭제와 미공유를 구분할 수 없음을 안내한다. 공급자 오류 본문·토큰·코드·쿠키는 로그나 응답에 노출하지 않는다.
+
+| 단계 | 현재 AI 코드의 기한 | Backend 읽기 타임아웃 권장 |
 | --- | --- | --- |
-| 작업 접수·조회 | 5초 | 10초 |
+| 작업 접수·조회 | 별도 5초 강제 제한 없음 | 10초 |
+| 수집·색인 실행 | INGESTION_TIMEOUT_SECONDS, 기본 600초. 최종 DB 저장의 강제 중단은 없음 | 접수 후 작업 조회로 확인 |
 | 삭제 | 10초 | 15초 |
 | 검색 | 15초 | 20초 |
-| 답변 | 60초 | 65초 |
+| 답변 | 전체 60초 | 65초 |
 
-retryable은 사용자가 다시 시도할 수 있다는 정보이며 자동 재시도 지시가 아니다. Retry-After는 폴링·사용자 재시도 대기 시간이다. requestId는 멱등성 키가 아니다.
+내부 API 자체의 요청 레이트 리미터는 없으며 HTTP 403·429를 별도 생성하지 않는다. Notion 권한·요청 제한은 비동기 작업의 FAILED 오류로 전달하고, 검색·답변 공급자 오류는 502 AI_PROVIDER_ERROR로 변환한다.
 
-현재 동기 POST `/integrations/notion/connections/{connection_id}/resources`는 이 계약의 접수 API가 아니며 HTTP 201을 반환한다. AI 자체 자료 ID를 발급한다. 전환 시 Backend 공통 ID 저장, COLLECT 비동기 접수·상태 조회, 삭제를 먼저 구현한다. 검색·색인은 이후 COLLECT_AND_INDEX와 함께 활성화한다. 기존 Backend REGISTERED/EXTRACTING/INDEXING/READY 상태 및 URL 입력 명세도 기준 문서의 새 자료/작업 상태와 연결·페이지 선택 입력으로 변경해야 한다.
+retryable은 사용자가 다시 시도할 수 있다는 정보이며 자동 재시도 지시가 아니다. 내부 API의 Retry-After: 2는 진행 중인 작업의 접수·조회 응답에 제공한다. 검색·답변의 공급자 오류에 이 헤더가 있다고 가정하지 않는다. requestId는 멱등성 키가 아니다.
+
+현재 POST `/internal/v1/ingestions`와 GET 작업 조회는 COLLECT 및 설정 활성화된 COLLECT_AND_INDEX에 대해 구현됐다. 기존 동기 POST `/integrations/notion/connections/{connection_id}/resources`는 호환용 deprecated API이며 자체 자료 ID를 발급하므로 신규 통합에 사용하지 않는다. 기존 자료 ID는 자동 변경하지 않으며 Backend ID 이관은 별도 작업이다. 자료 삭제·진행 수집 취소도 구현됐다. COLLECT_AND_INDEX 청킹·임베딩·색인은 설정 활성화 후 사용할 수 있다. RAG 검색·답변은 RAG_ENABLED 활성화 후 사용할 수 있다. 설정·생성 모델·검증은 [검색·답변 안내](../architecture/retrieval-and-answers.md)를 따른다. Backend 통합 시 기존 REGISTERED/EXTRACTING/INDEXING/READY 상태나 URL 입력 계약이 남아 있다면 기준 문서의 자료/작업 상태와 연결·페이지 선택 입력으로 맞춘다.
 
 영속 큐·자동 복구·자동 동기화·파일·일반 웹페이지 지원은 후속 범위다. 기존 공개 URL/HTML 수집 명세를 현재 OAuth 경로와 병행 적용하지 않는다.

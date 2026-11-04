@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, select
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, inspect, select, text
+from pgvector.sqlalchemy import VECTOR
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
-from app.schemas import NotionTokenResponse
+from app.adapters.outbound.notion.models import NotionTokenResponse
 
 
 class Base(DeclarativeBase):
@@ -53,8 +54,43 @@ class NotionResource(Base):
     )
 
 
-def init_db(engine: Engine) -> None:
-    Base.metadata.create_all(engine)
+class ResourceIndex(Base):
+    __tablename__ = "notion_resource_indexes"
+
+    resource_id: Mapped[str] = mapped_column(ForeignKey("notion_resources.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    embedding_model: Mapped[str] = mapped_column(String(100))
+    dimensions: Mapped[int] = mapped_column(Integer)
+    chunk_count: Mapped[int] = mapped_column(Integer)
+    chunk_size: Mapped[int] = mapped_column(Integer)
+    chunk_overlap: Mapped[int] = mapped_column(Integer)
+    chunking_version: Mapped[str] = mapped_column(String(64))
+    indexed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ResourceChunk(Base):
+    __tablename__ = "notion_chunks"
+    __table_args__ = (UniqueConstraint("resource_id", "sequence"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    resource_id: Mapped[str] = mapped_column(ForeignKey("notion_resources.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    sequence: Mapped[int] = mapped_column(Integer)
+    content: Mapped[str] = mapped_column(Text)
+    source_metadata: Mapped[dict] = mapped_column(JSON)
+    embedding: Mapped[list[float]] = mapped_column(VECTOR().with_variant(JSON(), "sqlite"))
+
+
+def init_db(engine: Engine, enable_indexing: bool = False) -> bool:
+    if engine.dialect.name == "postgresql" and enable_indexing:
+        with engine.connect() as connection:
+            if not connection.scalar(text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")):
+                raise RuntimeError("INDEXING_ENABLED requires pgvector: install it and run CREATE EXTENSION vector in the AI database")
+    tables = list(Base.metadata.sorted_tables)
+    if engine.dialect.name == "postgresql" and not enable_indexing:
+        tables = [table for table in tables if table.name != ResourceChunk.__tablename__]
+    Base.metadata.create_all(engine, tables=tables)
+    return inspect(engine).has_table(ResourceChunk.__tablename__)
 
 
 def get_connection(session: Session, user_id: str, connection_id: str) -> NotionConnection | None:

@@ -1,14 +1,14 @@
 # Notion OAuth: Backend Integration Contract
 
-Updated: 2026-11-03. Implementation: `ai/app` and `backend/app/routers/notion.py`.
+Updated: 2026-11-04. Implementation: `ai/app` and `backend/app/routers/notion.py`.
 
 This document describes the three implemented AI endpoints used to connect a
 Notion workspace to an authenticated Chat user. Backend already implements
 authentication-based user selection, cookie/callback relay, and completion
 redirects. End-to-end deployment still needs matching origins and configuration.
 The [Backend–AI architecture](../architecture/backend-ai-contract.md) defines
-the overall target; the [target ingestion/RAG contract](references.md) is not
-implemented by these OAuth endpoints. Keep the existing cookie relay; a separate
+the service boundaries; the implemented [ingestion/RAG contract](references.md)
+uses separate `/internal/v1` endpoints. Keep the existing cookie relay; a separate
 one-time browser-start URL API is not required.
 
 ## Ownership and prerequisites
@@ -230,8 +230,8 @@ browser cookie policy still apply to cross-site deployments. See
 
 ## Errors
 
-These endpoints currently use FastAPI's `detail` error format, not the proposed
-RAG `error.code` envelope. Do not rely on a normalized provider-specific error
+These endpoints currently use FastAPI's `detail` error format, not the internal
+ingestion/RAG `error.code` envelope. Do not rely on a normalized provider-specific error
 code for OAuth exchange failures.
 
 | Endpoint | HTTP | Meaning |
@@ -261,8 +261,8 @@ authorization URLs containing state.
 ## Local setup and verification
 
 Run from the repository's `ai` directory in CMD (for example
-`C:\workspaces\chat\ai`). A running PostgreSQL server and pre-created `find_ai`
-database are required. Windows-native PostgreSQL is supported; Docker is optional.
+`C:\workspaces\chat\ai`). The default development database is PostgreSQL 17 with
+pgvector from Compose. Start Docker Desktop before running the database.
 
 ```bat
 cd C:\workspaces\chat\ai
@@ -287,18 +287,23 @@ Generate a local key with
 `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
 Keep it local and do not include it in shared logs or screenshots.
 
-For Windows-native PostgreSQL 17, create the database from PowerShell (adjust the
-version to your installation). Enter your database password when prompted:
+Start the database from the `ai` directory:
 
-```powershell
-& 'C:\Program Files\PostgreSQL\17\bin\psql.exe' -h 127.0.0.1 -U postgres -d postgres -c 'CREATE DATABASE find_ai;'
+```bat
+docker compose up -d --wait db
+docker compose exec db psql -U postgres -d find_ai -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
-Skip creation if the database exists. Match DATABASE_URL to the actual account,
-password and port; URL-encode special characters in the password. Using 127.0.0.1
-for DB access does not require changing the browser-facing callback hostname.
-Alternatively, run `docker compose up -d --wait db` with Docker Desktop running.
-Do not run both servers on the same host port.
+The image keeps PostgreSQL major version 17 and the existing `notion_db` volume.
+Initialization SQL enables vector for a new volume; existing volumes need the
+explicit extension command above. Do not delete the volume to enable pgvector.
+See [indexing setup](../architecture/indexing.md#postgresql-준비) for verification.
+Match DATABASE_URL to the actual account, password and port; URL-encode special
+characters in passwords. For an existing volume, use its original credentials
+because POSTGRES_* variables only initialize new databases. A Windows-native
+server remains possible if its database and pgvector extension are prepared
+separately. Do not run both servers on host port 5432. Using 127.0.0.1 for DB
+access does not require changing the browser-facing callback hostname.
 
 ```bat
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --no-access-log
@@ -318,8 +323,10 @@ Run isolated automated tests with:
 python -m pytest -q
 ```
 
-Tests use mocked Notion HTTP responses and in-memory SQLite; they do not prove
-live Notion or PostgreSQL integration. For a manual integration check:
+OAuth tests use mocked Notion HTTP responses and SQLite; they do not prove
+live Notion integration. The broader suite includes file-based SQLite and
+optional dedicated PostgreSQL/pgvector tests via AI_TEST_POSTGRES_URL. It does
+not call live OpenAI models. For a manual integration check:
 
 1. Start authorization with POST through Backend using a logged-in Chat session.
    Confirm Backend sends AI a JSON body containing the session-derived `userId`.

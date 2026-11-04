@@ -6,7 +6,7 @@ from uuid import UUID
 import httpx
 from pydantic import BaseModel, Field, StrictBool, ValidationError, model_validator
 
-from app.schemas import NotionContentWarning
+from app.adapters.outbound.notion.models import NotionContentWarning
 
 
 class NotionApiError(Exception):

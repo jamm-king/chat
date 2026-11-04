@@ -3,7 +3,7 @@
   "info": {
     "title": "AI Service Internal API",
     "version": "2.0.0",
-    "description": "목표 계약·미구현: OAuth 연결 기반 비동기 수집·색인·검색·삭제. Backend 공통 resourceId, COLLECT/COLLECT_AND_INDEX, 자료 COLLECTED/READY 구분. 현행 OAuth·동기 API는 런타임 OpenAPI와 notion-oauth.md 참조. 기준: ../architecture/backend-ai-contract.md."
+    "description": "수집·청킹·임베딩·pgvector 색인·삭제·사용자 범위 검색·일반/자료 기반 답변 구현. INDEXING_ENABLED와 RAG_ENABLED는 각각 활성화가 필요하다. Backend 공통 resourceId, COLLECTED/READY 구분."
   },
   "servers": [
     {
@@ -37,8 +37,8 @@
         "tags": [
           "Ingestions"
         ],
-        "summary": "선택한 Notion 페이지의 비동기 수집·색인 접수 (목표)",
-        "description": "Backend가 userId·resourceId·jobId·connectionId·pageId·operation을 전달. AI가 소유권·ID 충돌을 검사하고 본문 수집 전에 202를 반환. COLLECT 성공은 COLLECTED, COLLECT_AND_INDEX 성공은 READY. 색인 기능 미구현 시 후자는 OPERATION_NOT_AVAILABLE로 거절. 자동 재귀 수집·URL 스크래핑 없음. 초기 메모리 작업 관리·재시작 유실 허용. references.md 참조.",
+        "summary": "선택한 Notion 페이지의 비동기 수집·색인 접수 (색인 설정 시 COLLECT_AND_INDEX 지원)",
+        "description": "Backend가 userId·resourceId·jobId·connectionId·pageId·operation을 전달. AI가 소유권·ID 충돌을 검사하고 본문 수집 전에 202를 반환. COLLECT 성공은 COLLECTED, COLLECT_AND_INDEX 성공은 READY. 색인 설정 비활성 시 후자는 OPERATION_NOT_AVAILABLE로 거절. 자동 재귀 수집·URL 스크래핑 없음. 초기 메모리 작업 관리·재시작 유실 허용. references.md 참조.",
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
@@ -75,6 +75,12 @@
               },
               "Retry-After": {
                 "$ref": "#/components/headers/RetryAfter"
+              },
+              "Location": {
+                "description": "작업 조회 상대 URL(userId query 포함).",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -131,9 +137,6 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
           "404": {
             "description": "CONNECTION_NOT_FOUND / RESOURCE_NOT_FOUND: 연결·부모 자료가 없거나 사용자의 접근 범위에 없음",
             "headers": {
@@ -176,22 +179,14 @@
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
-          "502": {
-            "$ref": "#/components/responses/ProviderError"
-          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "504": {
-            "$ref": "#/components/responses/ServiceTimeout"
           }
-        }
+        },
+        "x-implementation-status": "implemented-indexing-when-enabled"
       }
     },
     "/internal/v1/ingestions/{jobId}": {
@@ -247,9 +242,6 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
           "404": {
             "description": "JOB_NOT_FOUND",
             "headers": {
@@ -268,22 +260,11 @@
               }
             }
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/ProviderError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "504": {
-            "$ref": "#/components/responses/ServiceTimeout"
           }
-        }
+        },
+        "x-implementation-status": "implemented-indexing-when-enabled"
       }
     },
     "/internal/v1/resources/{resourceId}": {
@@ -292,8 +273,8 @@
         "tags": [
           "Resources"
         ],
-        "summary": "자료 검색 차단 및 AI 저장 데이터 삭제 (목표)",
-        "description": "사용자 범위로 진행 작업 취소·검색 차단 후 원본·본문·참조·청크·벡터 삭제, 204. 반복 삭제도 204. 부모 삭제는 자식 자동 삭제 없이 부모 관계 해제. 늦은 완료로 재공개 금지. Backend는 검색 제외와 과거 출처 스냅샷 보존. 실패 503/504이며 삭제 완료로 표시하지 않는다. 현재 런타임에는 미구현.",
+        "summary": "자료 삭제 및 진행 중 수집 작업 취소",
+        "description": "사용자 범위의 원본·본문·참조 행 삭제 후 204. 반복·없는 자료·다른 사용자 자료에도 204이며 타 사용자 데이터는 변경하지 않는다. 진행 작업은 CANCELLED/DELETED, RESOURCE_DELETED. 수집 완료와 삭제를 직렬화해 재저장 방지. 자식은 유지·부모 연결 해제. 물리 삭제 실패는 503, 10초 초과는 504이며 메모리 제외 유지. 성공/실패로 이미 끝난 작업은 과거 결과로 유지한다. 현재 원본·본문·참조·청크·벡터·색인 완료 레코드를 함께 삭제한다. 검색·답변은 삭제 제외·응답 직전 범위 재검증 적용. 재시작 후 메모리 삭제 이력 유실, Backend는 DELETED 제외 유지. references.md 참조.",
         "parameters": [
           {
             "name": "resourceId",
@@ -329,17 +310,8 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/ProviderError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -347,7 +319,8 @@
           "504": {
             "$ref": "#/components/responses/ServiceTimeout"
           }
-        }
+        },
+        "x-implementation-status": "implemented-current-storage"
       }
     },
     "/internal/v1/retrieval/search": {
@@ -398,9 +371,6 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
           "404": {
             "description": "RESOURCE_NOT_FOUND",
             "headers": {
@@ -420,7 +390,7 @@
             }
           },
           "409": {
-            "description": "RESOURCE_NOT_READY / RESOURCE_SCOPE_CHANGED",
+            "description": "RESOURCE_NOT_READY / RESOURCE_SCOPE_CHANGED / OPERATION_NOT_AVAILABLE",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -443,9 +413,6 @@
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
@@ -458,7 +425,8 @@
           "504": {
             "$ref": "#/components/responses/ServiceTimeout"
           }
-        }
+        },
+        "x-implementation-status": "implemented-configurable"
       }
     },
     "/internal/v1/answers": {
@@ -468,7 +436,7 @@
           "Answers"
         ],
         "summary": "일반 또는 자료 기반 동기 답변 생성",
-        "description": "멱등성·대화 저장·스트리밍 없음. 현재 질문은 message에만 전달. history는 완료 턴 최대 20개, 전체 입력 텍스트 32,000자 이하. RESOURCE의 빈 범위는 INSUFFICIENT_EVIDENCE. GENERAL에서 resourceIds 금지. 처리 기한 60초. 상세: references.md.",
+        "description": "멱등성·대화 저장·스트리밍 없음. 현재 질문은 message에만 전달. history는 완료 USER/ASSISTANT 메시지 최대 20개(10쌍), 전체 입력 텍스트 32,000자 이하. RESOURCE의 빈 범위는 INSUFFICIENT_EVIDENCE. GENERAL에서 resourceIds 금지. 처리 기한 60초. 상세: references.md.",
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
@@ -509,9 +477,6 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
           "404": {
             "description": "RESOURCE_NOT_FOUND (RESOURCE 모드)",
             "headers": {
@@ -531,7 +496,7 @@
             }
           },
           "409": {
-            "description": "RESOURCE_NOT_READY / RESOURCE_SCOPE_CHANGED (RESOURCE 모드)",
+            "description": "OPERATION_NOT_AVAILABLE (GENERAL/RESOURCE); RESOURCE_NOT_READY / RESOURCE_SCOPE_CHANGED (RESOURCE)",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -554,9 +519,6 @@
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
@@ -569,7 +531,8 @@
           "504": {
             "$ref": "#/components/responses/ServiceTimeout"
           }
-        }
+        },
+        "x-implementation-status": "implemented-configurable"
       }
     }
   },
@@ -614,7 +577,6 @@
                   "INVALID_REQUEST",
                   "CONTEXT_LIMIT_EXCEEDED",
                   "UNAUTHORIZED",
-                  "FORBIDDEN",
                   "RESOURCE_NOT_FOUND",
                   "JOB_NOT_FOUND",
                   "RESOURCE_NOT_READY",
@@ -623,9 +585,7 @@
                   "RESOURCE_ALREADY_INDEXED",
                   "RESOURCE_DELETED",
                   "RESOURCE_SCOPE_CHANGED",
-                  "PAYLOAD_TOO_LARGE",
                   "UNSUPPORTED_MEDIA_TYPE",
-                  "RATE_LIMITED",
                   "AI_PROVIDER_ERROR",
                   "AI_SERVICE_UNAVAILABLE",
                   "AI_SERVICE_TIMEOUT",
@@ -634,7 +594,10 @@
                   "RESOURCE_ALREADY_COLLECTED",
                   "RESOURCE_ID_CONFLICT",
                   "INVALID_PARENT_REFERENCE",
-                  "CONNECTION_NOT_FOUND"
+                  "CONNECTION_NOT_FOUND",
+                  "REQUEST_TOO_LARGE",
+                  "RESOURCE_DELETE_FAILED",
+                  "RESOURCE_DELETE_TIMEOUT"
                 ]
               },
               "message": {
@@ -737,14 +700,18 @@
               "NOTION_UNAVAILABLE",
               "NOTION_OVERLOADED",
               "NOTION_INVALID_RESPONSE",
-              "CONTENT_EXTRACTION_FAILED",
               "CONTENT_INCOMPLETE",
               "EMPTY_CONTENT",
               "EMBEDDING_FAILED",
               "INDEX_WRITE_FAILED",
               "INGESTION_TIMEOUT",
               "RESOURCE_DELETED",
-              "INTERNAL_ERROR"
+              "INTERNAL_ERROR",
+              "CONNECTION_NOT_FOUND",
+              "RESOURCE_NOT_FOUND",
+              "INVALID_PARENT_REFERENCE",
+              "NOTION_INVALID_REQUEST",
+              "RESOURCE_ID_CONFLICT"
             ]
           },
           "message": {
@@ -1712,26 +1679,8 @@
           }
         }
       },
-      "Forbidden": {
-        "description": "FORBIDDEN",
-        "headers": {
-          "X-Request-Id": {
-            "$ref": "#/components/headers/RequestId"
-          },
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          }
-        },
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorResponse"
-            }
-          }
-        }
-      },
       "PayloadTooLarge": {
-        "description": "PAYLOAD_TOO_LARGE",
+        "description": "REQUEST_TOO_LARGE: POST body exceeds 256 KiB",
         "headers": {
           "X-Request-Id": {
             "$ref": "#/components/headers/RequestId"
@@ -1756,27 +1705,6 @@
           },
           "Cache-Control": {
             "$ref": "#/components/headers/CacheControl"
-          }
-        },
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorResponse"
-            }
-          }
-        }
-      },
-      "RateLimited": {
-        "description": "RATE_LIMITED",
-        "headers": {
-          "X-Request-Id": {
-            "$ref": "#/components/headers/RequestId"
-          },
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          },
-          "Retry-After": {
-            "$ref": "#/components/headers/RetryAfter"
           }
         },
         "content": {
@@ -1831,9 +1759,6 @@
           },
           "Cache-Control": {
             "$ref": "#/components/headers/CacheControl"
-          },
-          "Retry-After": {
-            "$ref": "#/components/headers/RetryAfter"
           }
         },
         "content": {
@@ -1868,5 +1793,5 @@
     "description": "호출 방법과 정책 설명",
     "url": "./references.md"
   },
-  "x-implementation-status": "target-not-implemented"
+  "x-implementation-status": "collection-indexing-deletion-retrieval-answers-implemented"
 }

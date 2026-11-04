@@ -10,11 +10,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.config import Settings
-from app.db import NotionConnection
-from app.loader import load_page
+from app.adapters.outbound.persistence.models import NotionConnection
+from app.adapters.outbound.notion.loader import load_page
 from app.main import create_app
-from app.notion_auth import encrypt_token
-from app.notion_client import NotionApiError, NotionClient
+from app.adapters.outbound.notion.auth import encrypt_token
+from app.adapters.outbound.notion.client import NotionApiError, NotionClient
 
 USER_ID, CONNECTION_ID, PAGE_ID = str(uuid4()), str(uuid4()), str(uuid4())
 UNKNOWN_ID = str(uuid4())
