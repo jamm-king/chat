@@ -42,7 +42,7 @@ IngestionManager는 접수·작업 상태·기한·삭제 제외를 조율하고
 
 삭제와 스냅샷·색인 공개는 같은 유스케이스 잠금을 사용한다. 외부 호출을 기다리는 동안 잠금을 잡지 않으며, 늦게 끝난 호출은 삭제·기한을 다시 확인한 뒤 저장을 중단한다. 기존 동기 등록은 inbound/http/registration.py의 호환 경로에서 동일한 잠금을 사용한다. 삭제 실패 시 메모리 제외 표시는 유지한다.
 
-OAuth 쿠키·콜백 처리와 페이지 검색·미리보기는 기존 HTTP 어댑터에서 유지하고, 토큰 교환·암호화와 Notion 호출은 outbound/notion에 둔다. deprecated 동기 등록도 HTTP 호환 경로로 유지한다. 새 검색·답변 유스케이스는 이 호환 경로를 확장하지 않고 application의 포트에 연결한다.
+OAuth 쿠키·콜백 처리와 페이지 검색·미리보기는 기존 HTTP 어댑터에서 유지하고, 토큰 교환·암호화와 Notion 호출은 outbound/notion에 둔다. deprecated 동기 등록도 HTTP 호환 경로로 유지한다. 검색·답변 유스케이스는 application/use_cases/retrieval.py·answers.py와 RetrievalStore·AnswerGenerator 포트를 사용한다. PostgreSQL 검색과 LangChain ChatOpenAI는 외부 어댑터가 구현한다. [실행 안내](retrieval-and-answers.md)를 따른다.
 
 ## 검증
 

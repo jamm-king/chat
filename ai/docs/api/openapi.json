@@ -3,7 +3,7 @@
   "info": {
     "title": "AI Service Internal API",
     "version": "2.0.0",
-    "description": "COLLECT·COLLECT_AND_INDEX·자료 삭제 구현. INDEXING_ENABLED와 OpenAI 키·pgvector 준비 시 청킹·임베딩·원자적 색인 공개를 수행한다. RAG 검색·답변은 미구현. Backend 공통 resourceId, COLLECTED/READY 구분."
+    "description": "수집·청킹·임베딩·pgvector 색인·삭제·사용자 범위 검색·일반/자료 기반 답변 구현. INDEXING_ENABLED와 RAG_ENABLED는 각각 활성화가 필요하다. Backend 공통 resourceId, COLLECTED/READY 구분."
   },
   "servers": [
     {
@@ -295,7 +295,7 @@
           "Resources"
         ],
         "summary": "자료 삭제 및 진행 중 수집 작업 취소",
-        "description": "사용자 범위의 원본·본문·참조 행 삭제 후 204. 반복·없는 자료·다른 사용자 자료에도 204이며 타 사용자 데이터는 변경하지 않는다. 진행 작업은 CANCELLED/DELETED, RESOURCE_DELETED. 수집 완료와 삭제를 직렬화해 재저장 방지. 자식은 유지·부모 연결 해제. 물리 삭제 실패는 503, 10초 초과는 504이며 메모리 제외 유지. 성공/실패로 이미 끝난 작업은 과거 결과로 유지한다. 현재 원본·본문·참조·청크·벡터·색인 완료 레코드를 함께 삭제한다. RAG 검색은 미구현. 재시작 후 메모리 삭제 이력 유실, Backend는 DELETED 제외 유지. references.md 참조.",
+        "description": "사용자 범위의 원본·본문·참조 행 삭제 후 204. 반복·없는 자료·다른 사용자 자료에도 204이며 타 사용자 데이터는 변경하지 않는다. 진행 작업은 CANCELLED/DELETED, RESOURCE_DELETED. 수집 완료와 삭제를 직렬화해 재저장 방지. 자식은 유지·부모 연결 해제. 물리 삭제 실패는 503, 10초 초과는 504이며 메모리 제외 유지. 성공/실패로 이미 끝난 작업은 과거 결과로 유지한다. 현재 원본·본문·참조·청크·벡터·색인 완료 레코드를 함께 삭제한다. 검색·답변은 삭제 제외·응답 직전 범위 재검증 적용. 재시작 후 메모리 삭제 이력 유실, Backend는 DELETED 제외 유지. references.md 참조.",
         "parameters": [
           {
             "name": "resourceId",
@@ -461,7 +461,8 @@
           "504": {
             "$ref": "#/components/responses/ServiceTimeout"
           }
-        }
+        },
+        "x-implementation-status": "implemented-configurable"
       }
     },
     "/internal/v1/answers": {
@@ -572,7 +573,8 @@
           "504": {
             "$ref": "#/components/responses/ServiceTimeout"
           }
-        }
+        },
+        "x-implementation-status": "implemented-configurable"
       }
     }
   },
@@ -1878,5 +1880,5 @@
     "description": "호출 방법과 정책 설명",
     "url": "./references.md"
   },
-  "x-implementation-status": "collection-indexing-deletion-implemented"
+  "x-implementation-status": "collection-indexing-deletion-retrieval-answers-implemented"
 }

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.adapters.outbound.persistence.models import NotionConnection, NotionResource, ResourceChunk, ResourceIndex, init_db
 from app.adapters.outbound.persistence.resources import SqlAlchemyResourceStore
 from app.domain.documents import IndexSpecification, TextDocument
+from app.adapters.outbound.persistence.retrieval import SqlAlchemyRetrievalStore
 from sqlalchemy.orm import sessionmaker
 
 
@@ -68,6 +69,53 @@ def test_pgvector_storage_transaction_and_deletion():
                 session.delete(session.get(NotionConnection, connection))
                 session.commit()
     finally:
+        engine.dispose()
+
+
+@pytest.mark.skipif(not os.getenv("AI_TEST_POSTGRES_URL"), reason="Dedicated pgvector database not configured")
+def test_postgres_cosine_ranking_filters_user_scope_and_vector_space():
+    engine = create_engine(os.environ["AI_TEST_POSTGRES_URL"], hide_parameters=True)
+    sessions = sessionmaker(engine, expire_on_commit=False)
+    user, other_user, connection = (str(uuid4()) for _ in range(3))
+    resources = [str(uuid4()) for _ in range(4)]
+    now = datetime.now(timezone.utc)
+    store = SqlAlchemyResourceStore(sessions)
+    retrieval = SqlAlchemyRetrievalStore(sessions)
+    try:
+        store.vector_storage_available = init_db(engine, True)
+        with sessions() as session:
+            session.add(NotionConnection(id=connection, user_id=user, workspace_id=str(uuid4()),
+                                        bot_id=str(uuid4()), access_token_encrypted="test"))
+            session.commit()
+        for number, (resource, owner, model, vector) in enumerate([
+            (resources[0], user, "test-space", [0.0, 1.0, 0.0]),
+            (resources[1], user, "test-space", [1.0, 0.0, 0.0]),
+            (resources[2], other_user, "test-space", [1.0, 0.0, 0.0]),
+            (resources[3], user, "other-space", [1.0, 0.0]),
+        ]):
+            page = str(uuid4())
+            text = f"Document {number}"
+            doc = TextDocument(text, {"title": text, "source": "https://example.com", "page_id": page,
+                                     "content_status": "complete", "raw_content": text, "references": [],
+                                     "truncated": False, "unknown_block_ids": [], "warnings": [],
+                                     "last_edited_time": now.isoformat(), "collected_at": now.isoformat()})
+            store.save_snapshot((owner, connection, page, None), resource, doc)
+            store.publish_index(owner, resource, [TextDocument(text, {"sequence": 0})], [vector],
+                                IndexSpecification(model, len(vector), 80, 16, "test-v1", now))
+        scoped = retrieval.scope(user, resources)
+        assert set(scoped) == {resources[0], resources[1], resources[3]}
+        hits = retrieval.search(user, resources, [1.0, 0.0, 0.0], "test-space", 3, 10)
+        assert [hit.resource_id for hit in hits] == [resources[1], resources[0]]
+        assert len(retrieval.search(user, [resources[0]], [1.0, 0.0, 0.0], "test-space", 3, 10)) == 1
+        store.delete(user, resources[1])
+        assert [hit.resource_id for hit in retrieval.search(user, resources, [1.0, 0.0, 0.0], "test-space", 3, 10)] == [resources[0]]
+    finally:
+        for resource, owner in zip(resources, [user, user, other_user, user], strict=True):
+            store.delete(owner, resource)
+        with sessions() as session:
+            if row := session.get(NotionConnection, connection):
+                session.delete(row)
+                session.commit()
         engine.dispose()
 
 
