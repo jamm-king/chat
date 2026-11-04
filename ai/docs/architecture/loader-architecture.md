@@ -1,6 +1,6 @@
 # Notion 자료 로더 설계
 
-2026-11-03 · OAuth 기반 수집. [Backend–AI 계약](backend-ai-contract.md)이 기준이다.
+2026-11-04 · OAuth 기반 수집. [Backend–AI 계약](backend-ai-contract.md)이 기준이다.
 
 ## 범위와 현재 구현
 
@@ -21,7 +21,7 @@ NotionClient → load_page → NotionDocumentSource → TextDocument
                          → SUCCEEDED / 자료 READY
 ```
 
-직접 HTTP 호출은 동기 클라이언트이므로 목표 비동기 파이프라인에서는 스레드 등으로 실행해 이벤트 루프를 막지 않는다. 별도 워커·큐는 필수가 아니다. 청킹·임베딩은 로더 외부에서 담당하고 로더는 대화·벡터를 저장하지 않는다. 범용 로더 추상 클래스·선택기는 현재 필요하지 않다.
+직접 HTTP 호출은 동기 클라이언트이므로 현재 비동기 파이프라인은 스레드에서 실행해 이벤트 루프를 막지 않는다. 별도 워커·큐는 필수가 아니다. 청킹·임베딩은 로더 외부에서 담당하고 로더는 대화·벡터를 저장하지 않는다. 범용 로더 추상 클래스·선택기는 현재 필요하지 않다.
 
 ## Document와 저장 데이터
 
@@ -38,7 +38,7 @@ NotionClient → load_page → NotionDocumentSource → TextDocument
 
 현재는 한 페이지를 Document 하나로 반환하며 raw_content와 page_content가 같다. 원본·검색용 본문 필드는 구분하되 정제는 아직 하지 않는다. 애플리케이션 경계에서는 자체 TextDocument로 변환한다. LangChain Document를 코어에 전달하지 않는다. 구체적인 계층은 [헥사고날 구조](hexagonal.md)를 따른다.
 
-목표 저장 시 userId·resourceId는 Backend 요청에서 검증해 부여한다. 원본 문서에서 사용자·서비스 자료 ID를 읽지 않는다. 기존 AI 자체 UUID를 Backend 자료 ID로 자동 간주하지 않는다. 청크는 부모 resourceId와 출처 metadata를 보존한다.
+비동기 저장 시 userId·resourceId는 Backend 요청에서 검증해 부여한다. 원본 문서에서 사용자·서비스 자료 ID를 읽지 않는다. 기존 AI 자체 UUID를 Backend 자료 ID로 자동 간주하지 않는다. 청크는 부모 resourceId와 출처 metadata를 보존한다.
 
 ## 참조 처리
 

@@ -1,14 +1,14 @@
 # Notion OAuth: Backend Integration Contract
 
-Updated: 2026-11-03. Implementation: `ai/app` and `backend/app/routers/notion.py`.
+Updated: 2026-11-04. Implementation: `ai/app` and `backend/app/routers/notion.py`.
 
 This document describes the three implemented AI endpoints used to connect a
 Notion workspace to an authenticated Chat user. Backend already implements
 authentication-based user selection, cookie/callback relay, and completion
 redirects. End-to-end deployment still needs matching origins and configuration.
 The [Backend–AI architecture](../architecture/backend-ai-contract.md) defines
-the overall target; the [target ingestion/RAG contract](references.md) is not
-implemented by these OAuth endpoints. Keep the existing cookie relay; a separate
+the service boundaries; the implemented [ingestion/RAG contract](references.md)
+uses separate `/internal/v1` endpoints. Keep the existing cookie relay; a separate
 one-time browser-start URL API is not required.
 
 ## Ownership and prerequisites
@@ -230,8 +230,8 @@ browser cookie policy still apply to cross-site deployments. See
 
 ## Errors
 
-These endpoints currently use FastAPI's `detail` error format, not the proposed
-RAG `error.code` envelope. Do not rely on a normalized provider-specific error
+These endpoints currently use FastAPI's `detail` error format, not the internal
+ingestion/RAG `error.code` envelope. Do not rely on a normalized provider-specific error
 code for OAuth exchange failures.
 
 | Endpoint | HTTP | Meaning |
@@ -323,8 +323,10 @@ Run isolated automated tests with:
 python -m pytest -q
 ```
 
-Tests use mocked Notion HTTP responses and in-memory SQLite; they do not prove
-live Notion or PostgreSQL integration. For a manual integration check:
+OAuth tests use mocked Notion HTTP responses and SQLite; they do not prove
+live Notion integration. The broader suite includes file-based SQLite and
+optional dedicated PostgreSQL/pgvector tests via AI_TEST_POSTGRES_URL. It does
+not call live OpenAI models. For a manual integration check:
 
 1. Start authorization with POST through Backend using a logged-in Chat session.
    Confirm Backend sends AI a JSON body containing the session-derived `userId`.

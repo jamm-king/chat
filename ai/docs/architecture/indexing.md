@@ -51,7 +51,7 @@ docker compose exec db psql -U postgres -d find_ai -c "SELECT extversion FROM pg
 
 그다음 의존성을 `python -m pip install -e ".[test]"`로 갱신하고 .env에 실제 키를 입력한 뒤 INDEXING_ENABLED=true로 바꿔 단일 프로세스로 재시작한다. 확장이 활성화되지 않았으면 색인 활성화 시 시작 오류로 안내한다. 수집만 실행할 때는 false를 유지하면 된다. 테스트용 SQLite를 실제 pgvector의 대체로 간주하지 않는다.
 
-새 테이블은 시작 시 생성하며 기존 notion_resources 컬럼·자료 ID를 변경하지 않는다.
+색인 완료 테이블은 시작 시 생성한다. PostgreSQL의 notion_chunks는 INDEXING_ENABLED 또는 RAG_ENABLED가 true일 때 생성하며 둘 다 false이면 새 청크 테이블을 만들지 않는다. 기존 테이블을 삭제하지 않으며 기존 notion_resources 컬럼·자료 ID도 변경하지 않는다.
 
 | 테이블 | 저장 데이터 |
 | --- | --- |
