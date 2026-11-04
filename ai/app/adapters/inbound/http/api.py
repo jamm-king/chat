@@ -15,6 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.adapters.inbound.http.ingestions import create_ingestion_router, error_response, internal_headers, is_internal_request
 from app.adapters.inbound.http.resources import create_resource_router
+from app.adapters.inbound.http.rag import create_rag_router
 from app.adapters.outbound.persistence.models import NotionConnection, get_connection, save_connection
 from app.adapters.outbound.notion.loader import load_page, summarize_page
 from app.adapters.outbound.notion.client import NotionApiError, NotionClient
@@ -83,6 +84,7 @@ def create_http_app(lifespan) -> FastAPI:
 
     app.include_router(create_ingestion_router(require_service_token))
     app.include_router(create_resource_router(require_service_token))
+    app.include_router(create_rag_router(require_service_token))
 
     def get_notion_client(
         request: Request, connection_id: UUID,

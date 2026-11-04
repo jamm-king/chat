@@ -23,7 +23,8 @@ def error_response(request: Request, status: int, code: str, message: str,
 
 def is_internal_request(request: Request) -> bool:
     return any(request.url.path == prefix or request.url.path.startswith(prefix + "/")
-               for prefix in ("/internal/v1/ingestions", "/internal/v1/resources"))
+               for prefix in ("/internal/v1/ingestions", "/internal/v1/resources",
+                              "/internal/v1/retrieval/search", "/internal/v1/answers"))
 
 
 async def internal_headers(request: Request, call_next):

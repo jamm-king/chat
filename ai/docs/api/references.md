@@ -1,8 +1,8 @@
-# Backend → AI API 목표 계약
+# Backend → AI API 계약
 
-2026-11-04 · API 명세 v2.0.0 · **COLLECT·COLLECT_AND_INDEX·자료 삭제 구현, RAG 검색·답변 미구현**
+2026-11-04 · API 명세 v2.0.0 · **COLLECT·COLLECT_AND_INDEX·자료 삭제·RAG 검색·답변 구현**
 
-기준 결정은 [Backend–AI 연동 구조](../architecture/backend-ai-contract.md)다. 현재 OAuth는 [현행 OAuth 계약](notion-oauth.md), 현재 동기 페이지 조회·저장은 실행 중 `/openapi.json`을 따른다. 이 문서와 [정적 OpenAPI](openapi.json)는 현재 수집·색인·자료 삭제와 후속 RAG 계약을 함께 기술한다. 실제 구현 목록은 런타임 스키마로 확인한다. 2026-10-29의 공개 URL 스크래핑 계약은 이 문서로 대체한다.
+기준 결정은 [Backend–AI 연동 구조](../architecture/backend-ai-contract.md)다. 현재 OAuth는 [현행 OAuth 계약](notion-oauth.md), 현재 동기 페이지 조회·저장은 실행 중 `/openapi.json`을 따른다. 이 문서와 [정적 OpenAPI](openapi.json)는 현재 수집·색인·자료 삭제·RAG 계약을 함께 기술한다. 실제 구현 목록은 런타임 스키마로 확인한다. 2026-10-29의 공개 URL 스크래핑 계약은 이 문서로 대체한다.
 
 v2.0.0은 정적 계약 문서의 버전이다. 목표 경로는 `/internal/v1`을 유지하며, 배포된 API의 호환성을 확인했다는 의미는 아니다.
 
@@ -11,12 +11,12 @@ v2.0.0은 정적 계약 문서의 버전이다. 목표 경로는 `/internal/v1`�
 - 로컬 AI 주소: `http://localhost:8001`.
 - Backend가 사용자 인증 후 `Authorization: Bearer <AI_SERVICE_TOKEN>`으로 호출한다. OAuth 콜백은 이 서비스 토큰 대상이 아니다.
 - userId는 Backend 로그인 사용자이며 AI도 연결·자료·색인을 사용자 범위로 제한한다.
-- ID는 UUID, 시간은 UTC RFC 3339, JSON은 UTF-8. 목표 API 필드명은 camelCase다. 현행 OAuth·페이지 API 응답의 snake_case는 별도 계약이다.
+- ID는 UUID, 시간은 UTC RFC 3339, JSON은 UTF-8. 내부 API 필드명은 camelCase다. 현행 OAuth·페이지 API 응답의 snake_case는 별도 계약이다.
 - POST 본문은 최대 256 KiB이며 알 수 없는 필드를 거절한다. GET·DELETE에는 본문이 없다.
 - 선택 UUID 헤더 X-Request-Id는 요청 추적용이며 멱등성을 보장하지 않는다. 미지정 시 생성하고 잘못된 형식은 400이다. 응답에는 실제 ID와 `Cache-Control: no-store`를 포함한다.
 - resourceId와 jobId는 Backend가 발급한다. 별도 ai_resource_id는 도입하지 않는다.
 
-| Method | 목표 경로 | 정상 응답 |
+| Method | 경로 | 정상 응답 |
 | --- | --- | --- |
 | POST | `/internal/v1/ingestions` | 신규 202, 동일 작업 200 |
 | GET | `/internal/v1/ingestions/{jobId}?userId={userId}` | 200 |
@@ -201,7 +201,7 @@ AI 삭제가 실패하면 503, 기한 초과면 504다. Backend는 검색 제외
 
 ### 현재 삭제 구현과 제약
 
-삭제 API는 구현돼 있다. 현재 저장된 원본·본문·참조는 한 자료 행에 있으므로 해당 행을 삭제한다. 청크·벡터·색인 완료 레코드도 같은 삭제 트랜잭션으로 제거한다. RAG 검색·답변은 아직 미구현이다. Notion 원문을 수정·삭제하는 API는 호출하지 않는다.
+삭제 API는 구현돼 있다. 현재 저장된 원본·본문·참조는 한 자료 행에 있으므로 해당 행을 삭제한다. 청크·벡터·색인 완료 레코드도 같은 삭제 트랜잭션으로 제거한다. RAG 검색·답변에서도 삭제 제외와 응답 직전 범위 재검증을 적용한다. Notion 원문을 수정·삭제하는 API는 호출하지 않는다.
 
 - 진행 중인 해당 사용자·자료 작업은 CANCELLED, resourceStatus=DELETED, error.code=RESOURCE_DELETED, retryable=false가 된다. 이미 전송한 Notion HTTP 요청을 강제 중단하지는 않지만 늦게 돌아온 결과는 저장하지 않는다.
 - 동일 자료의 수집 완료 반영과 삭제는 같은 잠금으로 조율한다. 삭제가 먼저면 저장하지 않고, 저장이 먼저면 저장 행을 삭제한다.
@@ -224,6 +224,6 @@ AI 삭제가 실패하면 503, 기한 초과면 504다. Backend는 검색 제외
 
 retryable은 사용자가 다시 시도할 수 있다는 정보이며 자동 재시도 지시가 아니다. Retry-After는 폴링·사용자 재시도 대기 시간이다. requestId는 멱등성 키가 아니다.
 
-현재 POST `/internal/v1/ingestions`와 GET 작업 조회는 COLLECT 및 설정 활성화된 COLLECT_AND_INDEX에 대해 구현됐다. 기존 동기 POST `/integrations/notion/connections/{connection_id}/resources`는 호환용 deprecated API이며 자체 자료 ID를 발급하므로 신규 통합에 사용하지 않는다. 기존 자료 ID는 자동 변경하지 않으며 Backend ID 이관은 별도 작업이다. 자료 삭제·진행 수집 취소도 구현됐다. COLLECT_AND_INDEX 청킹·임베딩·색인은 설정 활성화 후 사용할 수 있다. 다음 단계는 RAG 검색·답변이다. 기존 Backend REGISTERED/EXTRACTING/INDEXING/READY 상태 및 URL 입력 명세도 기준 문서의 새 자료/작업 상태와 연결·페이지 선택 입력으로 변경해야 한다.
+현재 POST `/internal/v1/ingestions`와 GET 작업 조회는 COLLECT 및 설정 활성화된 COLLECT_AND_INDEX에 대해 구현됐다. 기존 동기 POST `/integrations/notion/connections/{connection_id}/resources`는 호환용 deprecated API이며 자체 자료 ID를 발급하므로 신규 통합에 사용하지 않는다. 기존 자료 ID는 자동 변경하지 않으며 Backend ID 이관은 별도 작업이다. 자료 삭제·진행 수집 취소도 구현됐다. COLLECT_AND_INDEX 청킹·임베딩·색인은 설정 활성화 후 사용할 수 있다. RAG 검색·답변은 RAG_ENABLED 활성화 후 사용할 수 있다. 설정·생성 모델·검증은 [검색·답변 안내](../architecture/retrieval-and-answers.md)를 따른다. 기존 Backend REGISTERED/EXTRACTING/INDEXING/READY 상태 및 URL 입력 명세도 기준 문서의 새 자료/작업 상태와 연결·페이지 선택 입력으로 변경해야 한다.
 
 영속 큐·자동 복구·자동 동기화·파일·일반 웹페이지 지원은 후속 범위다. 기존 공개 URL/HTML 수집 명세를 현재 OAuth 경로와 병행 적용하지 않는다.

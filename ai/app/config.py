@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     notion_api_version: Literal["2026-03-11"] = "2026-03-11"
     ingestion_timeout_seconds: float = Field(default=600, gt=0, le=600)
     indexing_enabled: bool = False
+    rag_enabled: bool = False
+    answer_model: str = Field(default="gpt-6-luna", min_length=1)
+    answer_provider_timeout_seconds: float = Field(default=40, gt=0, le=55)
+    answer_max_output_tokens: int = Field(default=4096, ge=1024, le=8192)
+    answer_context_budget_bytes: int = Field(default=64000, ge=8192, le=256000)
     openai_api_key: SecretStr | None = None
     embedding_model: Literal["text-embedding-3-small", "text-embedding-3-large"] = "text-embedding-3-small"
     embedding_dimensions: int = Field(default=1536, ge=1, le=3072)
@@ -38,8 +43,8 @@ class Settings(BaseSettings):
             raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_SIZE")
         if self.embedding_model == "text-embedding-3-small" and self.embedding_dimensions > 1536:
             raise ValueError("text-embedding-3-small supports at most 1536 dimensions")
-        if self.indexing_enabled and (not self.openai_api_key or not self.openai_api_key.get_secret_value().strip()):
-            raise ValueError("OPENAI_API_KEY is required when INDEXING_ENABLED=true")
+        if (self.indexing_enabled or self.rag_enabled) and (not self.openai_api_key or not self.openai_api_key.get_secret_value().strip()):
+            raise ValueError("OPENAI_API_KEY is required when INDEXING_ENABLED or RAG_ENABLED is true")
         return self
 
     @field_validator("token_encryption_key")

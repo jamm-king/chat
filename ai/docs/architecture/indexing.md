@@ -1,6 +1,6 @@
 # 청킹·임베딩·색인
 
-2026-11-04 · COLLECT_AND_INDEX 구현. RAG 검색·답변 API는 다음 단계다.
+2026-11-04 · COLLECT_AND_INDEX 구현. RAG 검색·답변도 구현됐으며 [실행 안내](retrieval-and-answers.md)를 따른다.
 
 ## 동작
 
@@ -58,7 +58,7 @@ docker compose exec db psql -U postgres -d find_ai -c "SELECT extversion FROM pg
 | notion_resource_indexes | 완료 자료 ID·사용자, 모델·차원, 청크 수·크기·중첩·분할 버전, 색인 시각 |
 | notion_chunks | 청크 ID·사용자·자료 ID·순서·본문·출처 metadata·pgvector 벡터 |
 
-벡터 컬럼은 모델 차원 변경을 수용하며 각 완료 레코드에 실제 차원과 모델을 기록한다. 검색 구현 시 다른 모델 공간·차원의 벡터를 섞어 비교하면 안 된다. 현재 대규모 ANN/HNSW 인덱스는 만들지 않는다. MVP의 벡터 저장·공개 계약을 먼저 검증하며 검색 API와 성능 최적화는 다음 단계다.
+벡터 컬럼은 모델 차원 변경을 수용하며 각 완료 레코드에 실제 차원과 모델을 기록한다. 검색 구현 시 다른 모델 공간·차원의 벡터를 섞어 비교하면 안 된다. 현재 대규모 ANN/HNSW 인덱스는 만들지 않는다. 현재 검색 API는 사용자·모델·차원 범위로 제한한 코사인 거리 검색을 수행한다. 성능 최적화는 이후 단계다.
 
 ## 취소·삭제·검증
 
