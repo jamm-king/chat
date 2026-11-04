@@ -13,7 +13,7 @@ Notion OAuth 연결, 공식 API 페이지 조회, 원본·본문·참조 저장�
 
 현재 실행 진입점은 `app.main:app`이며 `/docs`와 `/openapi.json`이 실제 구현 스키마다. OAuth·Notion 페이지 검색·미리보기와 COLLECT 비동기 접수·조회가 구현돼 있다. 기존 동기 자료 등록은 호환용 deprecated API다. 사용자별 자료 삭제·진행 작업 취소도 구현돼 있다. 청킹·OpenAI 임베딩·pgvector 저장과 COLLECT_AND_INDEX도 구현돼 있다. RAG 검색·답변 API는 아직 구현되지 않았다.
 
-설정·실행은 [OAuth 문서](docs/api/notion-oauth.md#local-setup-and-verification)를 따른다. DB는 Windows에 직접 설치한 PostgreSQL을 사용할 수 있으며 Docker는 선택 사항이다.
+설정·실행은 [OAuth 문서](docs/api/notion-oauth.md#local-setup-and-verification)를 따른다. 기본 개발 DB는 Compose의 PostgreSQL 17 + pgvector다. 기존 볼륨의 확장 활성화 절차는 [색인 안내](docs/architecture/indexing.md#postgresql-준비)를 따른다.
 
 
 ## 비동기 수집 실행 확인

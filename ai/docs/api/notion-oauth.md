@@ -261,8 +261,8 @@ authorization URLs containing state.
 ## Local setup and verification
 
 Run from the repository's `ai` directory in CMD (for example
-`C:\workspaces\chat\ai`). A running PostgreSQL server and pre-created `find_ai`
-database are required. Windows-native PostgreSQL is supported; Docker is optional.
+`C:\workspaces\chat\ai`). The default development database is PostgreSQL 17 with
+pgvector from Compose. Start Docker Desktop before running the database.
 
 ```bat
 cd C:\workspaces\chat\ai
@@ -287,18 +287,23 @@ Generate a local key with
 `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
 Keep it local and do not include it in shared logs or screenshots.
 
-For Windows-native PostgreSQL 17, create the database from PowerShell (adjust the
-version to your installation). Enter your database password when prompted:
+Start the database from the `ai` directory:
 
-```powershell
-& 'C:\Program Files\PostgreSQL\17\bin\psql.exe' -h 127.0.0.1 -U postgres -d postgres -c 'CREATE DATABASE find_ai;'
+```bat
+docker compose up -d --wait db
+docker compose exec db psql -U postgres -d find_ai -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
-Skip creation if the database exists. Match DATABASE_URL to the actual account,
-password and port; URL-encode special characters in the password. Using 127.0.0.1
-for DB access does not require changing the browser-facing callback hostname.
-Alternatively, run `docker compose up -d --wait db` with Docker Desktop running.
-Do not run both servers on the same host port.
+The image keeps PostgreSQL major version 17 and the existing `notion_db` volume.
+Initialization SQL enables vector for a new volume; existing volumes need the
+explicit extension command above. Do not delete the volume to enable pgvector.
+See [indexing setup](../architecture/indexing.md#postgresql-준비) for verification.
+Match DATABASE_URL to the actual account, password and port; URL-encode special
+characters in passwords. For an existing volume, use its original credentials
+because POSTGRES_* variables only initialize new databases. A Windows-native
+server remains possible if its database and pgvector extension are prepared
+separately. Do not run both servers on host port 5432. Using 127.0.0.1 for DB
+access does not require changing the browser-facing callback hostname.
 
 ```bat
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --no-access-log

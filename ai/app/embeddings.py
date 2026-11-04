@@ -2,6 +2,8 @@ import math
 from typing import Protocol
 
 import httpx
+from langchain_openai import OpenAIEmbeddings
+from openai import APIConnectionError, APIStatusError, OpenAIError
 
 from app.config import Settings
 
@@ -34,33 +36,28 @@ def validate_vectors(vectors, count: int, dimensions: int) -> list[list[float]]:
 
 class OpenAIEmbeddingClient:
     def __init__(self, settings: Settings, client: httpx.Client):
-        self.settings, self.client = settings, client
+        self.settings = settings
+        self.embeddings = OpenAIEmbeddings(
+            api_key=settings.openai_api_key,
+            base_url="https://api.openai.com/v1",
+            model=settings.embedding_model,
+            dimensions=settings.embedding_dimensions,
+            chunk_size=settings.embedding_batch_size,
+            check_embedding_ctx_length=False,
+            max_retries=0,
+            request_timeout=settings.embedding_timeout_seconds,
+            http_client=client,
+            model_kwargs={"encoding_format": "float"},
+        )
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         try:
-            response = self.client.post(
-                "https://api.openai.com/v1/embeddings",
-                headers={"Authorization": "Bearer " + self.settings.openai_api_key.get_secret_value()},
-                json={"model": self.settings.embedding_model, "input": texts,
-                      "dimensions": self.settings.embedding_dimensions, "encoding_format": "float"},
-                follow_redirects=False,
-            )
-        except httpx.RequestError:
+            vectors = self.embeddings.embed_documents(texts)
+        except APIConnectionError:
             raise EmbeddingError("Embedding provider request failed", True) from None
-        if not response.is_success:
+        except APIStatusError as error:
             raise EmbeddingError("Embedding provider rejected the request",
-                                 response.status_code == 429 or response.status_code >= 500)
-        try:
-            data = response.json()["data"]
-            if not isinstance(data, list) or len(data) != len(texts):
-                raise ValueError
-            by_index = {}
-            for item in data:
-                index = item["index"]
-                if type(index) is not int or index < 0 or index >= len(texts) or index in by_index:
-                    raise ValueError
-                by_index[index] = item["embedding"]
-            return validate_vectors([by_index[i] for i in range(len(texts))], len(texts),
-                                    self.settings.embedding_dimensions)
-        except (ValueError, TypeError, KeyError):
+                                 error.status_code == 429 or error.status_code >= 500) from None
+        except (OpenAIError, ValueError, TypeError, KeyError, AttributeError):
             raise EmbeddingError("Embedding provider returned an invalid response") from None
+        return validate_vectors(vectors, len(texts), self.settings.embedding_dimensions)
