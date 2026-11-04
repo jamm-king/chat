@@ -8,7 +8,7 @@ import httpx
 from cryptography.fernet import InvalidToken
 from fastapi import HTTPException
 from langchain_core.documents import Document
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 
@@ -19,6 +19,7 @@ from app.loader import load_page
 from app.notion_auth import decrypt_token
 from app.notion_client import NotionApiError, NotionClient
 from app.resources import build_resource, validate_parent
+from app.schemas import NotionResourceResponse, NotionResourceSummary
 
 TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED"}
 
@@ -43,6 +44,7 @@ class IngestionManager:
         self.jobs: dict[UUID, IngestionJob] = {}
         self.deadlines: dict[UUID, float] = {}
         self.tasks: set[asyncio.Task] = set()
+        self.deleted_resources: set[tuple[str, str]] = set()
 
     def submit(self, body: IngestionRequest) -> tuple[IngestionJob, bool]:
         # Serialize admission so simultaneous requests cannot reserve the same job/resource/page.
@@ -53,7 +55,13 @@ class IngestionManager:
                     raise IngestionError(404, "JOB_NOT_FOUND", "Job not found")
                 if old != body:
                     raise IngestionError(409, "JOB_ID_CONFLICT", "Job ID was used with different input")
+                if self._is_deleted(body) and self.jobs[body.job_id].status != "CANCELLED":
+                    raise IngestionError(409, "RESOURCE_DELETED", "Resource was deleted")
                 return self.jobs[body.job_id].model_copy(deep=True), False
+            if self._is_deleted(body):
+                raise IngestionError(409, "RESOURCE_DELETED", "Resource was deleted")
+            if body.parent_resource_id and (str(body.user_id), str(body.parent_resource_id)) in self.deleted_resources:
+                raise IngestionError(409, "RESOURCE_DELETED", "Parent resource was deleted")
             if body.operation != "COLLECT":
                 raise IngestionError(409, "OPERATION_NOT_AVAILABLE", "Indexing is not available yet")
             with self.sessions() as session:
@@ -106,6 +114,74 @@ class IngestionManager:
                 raise IngestionError(404, "JOB_NOT_FOUND", "Job not found")
             return job.model_copy(deep=True)
 
+    def _is_deleted(self, body: IngestionRequest) -> bool:
+        return (str(body.user_id), str(body.resource_id)) in self.deleted_resources
+
+    def delete(self, resource_id: UUID, user_id: UUID) -> None:
+        user, resource = str(user_id), str(resource_id)
+        # Share the collection commit lock so either deletion or completion wins atomically.
+        with self.lock:
+            self.deleted_resources.add((user, resource))
+            for job_id, body in self.requests.items():
+                job = self.jobs[job_id]
+                if body.user_id == user_id and body.resource_id == resource_id and job.status not in TERMINAL:
+                    job.status, job.resourceStatus, job.completedAt = "CANCELLED", "DELETED", now()
+                    job.result = None
+                    job.error = JobError(code="RESOURCE_DELETED", message="Resource was deleted", retryable=False)
+            # Keep the exclusion marker even if physical deletion fails. Caller can retry deletion.
+            with self.sessions() as session:
+                row = session.scalar(select(NotionResource).where(
+                    NotionResource.id == resource, NotionResource.user_id == user,
+                ))
+                if row is None:
+                    return
+                session.execute(update(NotionResource).where(
+                    NotionResource.parent_resource_id == resource,
+                    NotionResource.user_id == user,
+                ).values(parent_resource_id=None))
+                session.delete(row)
+                session.commit()
+
+    def read_resource(self, user_id: str, resource_id: str) -> NotionResourceResponse:
+        with self.lock:
+            if (user_id, resource_id) in self.deleted_resources:
+                raise HTTPException(404, "Resource not found")
+            with self.sessions() as session:
+                row = session.scalar(select(NotionResource).where(
+                    NotionResource.id == resource_id, NotionResource.user_id == user_id,
+                ))
+                if row is None:
+                    raise HTTPException(404, "Resource not found")
+                return NotionResourceResponse.model_validate(row)
+
+    def list_resources(self, user_id: str, connection_id: str, limit: int, offset: int) -> list[dict]:
+        with self.lock:
+            excluded = [resource for user, resource in self.deleted_resources if user == user_id]
+            with self.sessions() as session:
+                rows = session.scalars(select(NotionResource).where(
+                    NotionResource.user_id == user_id, NotionResource.connection_id == connection_id,
+                    NotionResource.id.not_in(excluded),
+                ).order_by(NotionResource.created_at, NotionResource.id).limit(limit).offset(offset)).all()
+                return [NotionResourceSummary.model_validate(row).model_dump(mode="json") for row in rows]
+
+    def persist_legacy_resource(self, session, resource: NotionResource) -> None:
+        # Deprecated synchronous registration must use the same finalization gate as async jobs.
+        with self.lock:
+            if (resource.user_id, resource.id) in self.deleted_resources:
+                raise HTTPException(409, "Resource was deleted")
+            if (resource.user_id, resource.parent_resource_id) in self.deleted_resources:
+                resource.parent_resource_id = None
+            else:
+                validate_parent(session, resource.user_id, resource.connection_id,
+                                resource.page_id, resource.parent_resource_id)
+            session.add(resource)
+            session.commit()
+
+    def validate_legacy_registration(self, user_id: str, parent_resource_id: UUID | None) -> None:
+        with self.lock:
+            if parent_resource_id and (user_id, str(parent_resource_id)) in self.deleted_resources:
+                raise HTTPException(409, "Parent resource was deleted")
+
     async def start(self, job_id: UUID) -> None:
         # Called as response background work: schedule execution, never await the collection here.
         task = asyncio.create_task(self.run(job_id))
@@ -131,7 +207,7 @@ class IngestionManager:
         # A timed-out/cancelled fetch can finish in its thread but must never write a late document.
         with self.lock:
             job = self.jobs[body.job_id]
-            if job.status in TERMINAL:
+            if job.status in TERMINAL or self._is_deleted(body):
                 return
             if time.monotonic() >= self.deadlines[body.job_id]:
                 raise TimeoutError
@@ -142,8 +218,12 @@ class IngestionManager:
                 referenceCount=len(metadata["references"]),
             )
             with self.sessions() as session:
-                self._validate_parent(session, body)
-                resource = build_resource(document, *self._identity(body), str(body.resource_id))
+                identity = self._identity(body)
+                if (str(body.user_id), identity[3]) in self.deleted_resources:
+                    identity = (*identity[:3], None)
+                else:
+                    self._validate_parent(session, body)
+                resource = build_resource(document, *identity, str(body.resource_id))
                 session.add(resource)
                 session.commit()
             job.status = "EXTRACTED"
@@ -161,6 +241,8 @@ class IngestionManager:
     async def run(self, job_id: UUID) -> None:
         body = self.requests[job_id]
         with self.lock:
+            if self.jobs[job_id].status in TERMINAL:
+                return
             self.jobs[job_id].status = "EXTRACTING"
             self.jobs[job_id].startedAt = now()
         try:

@@ -6,7 +6,7 @@
 
 사용자가 OAuth로 연결한 워크스페이스에서 페이지를 선택하면 AI가 해당 연결의 토큰으로 Notion 공식 API를 호출한다. 공개 여부보다 연결의 접근 권한이 기준이다. 공개 URL 스크래핑, HTML 추출, 브라우저 렌더링을 전제로 한 2026-10-29 설계는 대체됐다.
 
-현재 `app/loader.py`의 `load_page(client, page_id)`가 페이지 정보와 Markdown을 조회해 `list[langchain_core.documents.Document]`를 반환한다. 현재 동기 등록은 `app/resources.py`에서 원본·본문·참조를 저장한다. COLLECT 비동기 접수·조회는 app/ingestion.py와 app/ingestion_api.py에 구현돼 있다. 기존 동기 등록은 deprecated이며 색인 API는 아직 구현하지 않았다.
+현재 `app/loader.py`의 `load_page(client, page_id)`가 페이지 정보와 Markdown을 조회해 `list[langchain_core.documents.Document]`를 반환한다. 현재 동기 등록은 `app/resources.py`에서 원본·본문·참조를 저장한다. COLLECT 비동기 접수·조회는 app/ingestion.py와 app/ingestion_api.py에 구현돼 있다. 기존 동기 등록은 deprecated이며 색인 API는 아직 구현하지 않았다. 삭제 시 진행 중 수집은 CANCELLED가 되고 늦은 조회 결과를 저장하지 않는다.
 
 ## 수집·색인 흐름
 

@@ -1,4 +1,5 @@
 from datetime import datetime
+from collections.abc import Callable
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -24,6 +25,7 @@ def get_resource(session: Session, user_id: str, resource_id: str) -> NotionReso
 def register_resource(
     session: Session, client: NotionClient, user_id: str, connection_id: str,
     request: RegisterNotionResourceRequest,
+    persist: Callable[[Session, NotionResource], None] | None = None,
 ) -> NotionResourceResponse:
     validate_parent(session, user_id, connection_id, str(request.page_id),
                     str(request.parent_resource_id) if request.parent_resource_id else None)
@@ -36,12 +38,17 @@ def register_resource(
         raise HTTPException(409, "Page is already registered for this connection")
 
     # Legacy synchronous API. New callers use /internal/v1/ingestions and supply resourceId.
+    # End the read-only admission transaction before network I/O and the finalization lock.
+    session.rollback()
     document = load_page(client, request.page_id)[0]
     resource = build_resource(document, user_id, connection_id, str(request.page_id),
                               str(request.parent_resource_id) if request.parent_resource_id else None)
-    session.add(resource)
     try:
-        session.commit()
+        if persist is None:
+            session.add(resource)
+            session.commit()
+        else:
+            persist(session, resource)
     except IntegrityError:
         session.rollback()
         raise HTTPException(409, "Resource conflicts with an existing registration") from None
