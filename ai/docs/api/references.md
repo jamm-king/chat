@@ -1,8 +1,8 @@
 # Backend → AI API 목표 계약
 
-2026-11-03 · 목표 명세 v2.0.0 · **현재 런타임에 아직 구현되지 않은 비동기 수집·색인·삭제·검색 계약**
+2026-11-04 · API 명세 v2.0.0 · **COLLECT 비동기 접수·조회 구현, 색인·삭제·검색 미구현**
 
-기준 결정은 [Backend–AI 연동 구조](../architecture/backend-ai-contract.md)다. 현재 OAuth는 [현행 OAuth 계약](notion-oauth.md), 현재 동기 페이지 조회·저장은 실행 중 `/openapi.json`을 따른다. 이 문서와 [정적 OpenAPI](openapi.json)는 목표 계약이며 현재 서버의 구현 목록이 아니다. 2026-10-29의 공개 URL 스크래핑 계약은 이 문서로 대체한다.
+기준 결정은 [Backend–AI 연동 구조](../architecture/backend-ai-contract.md)다. 현재 OAuth는 [현행 OAuth 계약](notion-oauth.md), 현재 동기 페이지 조회·저장은 실행 중 `/openapi.json`을 따른다. 이 문서와 [정적 OpenAPI](openapi.json)는 현재 COLLECT와 후속 목표 계약을 함께 기술한다. 실제 구현 목록은 런타임 스키마로 확인한다. 2026-10-29의 공개 URL 스크래핑 계약은 이 문서로 대체한다.
 
 v2.0.0은 정적 계약 문서의 버전이다. 목표 경로는 `/internal/v1`을 유지하며, 배포된 API의 호환성을 확인했다는 의미는 아니다.
 
@@ -212,6 +212,6 @@ AI 삭제가 실패하면 503, 기한 초과면 504다. Backend는 검색 제외
 
 retryable은 사용자가 다시 시도할 수 있다는 정보이며 자동 재시도 지시가 아니다. Retry-After는 폴링·사용자 재시도 대기 시간이다. requestId는 멱등성 키가 아니다.
 
-현재 동기 POST `/integrations/notion/connections/{connection_id}/resources`는 이 계약의 접수 API가 아니며 HTTP 201을 반환한다. AI 자체 자료 ID를 발급한다. 전환 시 Backend 공통 ID 저장, COLLECT 비동기 접수·상태 조회, 삭제를 먼저 구현한다. 검색·색인은 이후 COLLECT_AND_INDEX와 함께 활성화한다. 기존 Backend REGISTERED/EXTRACTING/INDEXING/READY 상태 및 URL 입력 명세도 기준 문서의 새 자료/작업 상태와 연결·페이지 선택 입력으로 변경해야 한다.
+현재 POST `/internal/v1/ingestions`와 GET 작업 조회는 COLLECT에 대해 구현됐다. 기존 동기 POST `/integrations/notion/connections/{connection_id}/resources`는 호환용 deprecated API이며 자체 자료 ID를 발급하므로 신규 통합에 사용하지 않는다. 기존 자료 ID는 자동 변경하지 않으며 Backend ID 이관은 별도 작업이다. 다음 단계는 삭제·작업 취소다. 검색·색인은 이후 COLLECT_AND_INDEX와 함께 활성화한다. 기존 Backend REGISTERED/EXTRACTING/INDEXING/READY 상태 및 URL 입력 명세도 기준 문서의 새 자료/작업 상태와 연결·페이지 선택 입력으로 변경해야 한다.
 
 영속 큐·자동 복구·자동 동기화·파일·일반 웹페이지 지원은 후속 범위다. 기존 공개 URL/HTML 수집 명세를 현재 OAuth 경로와 병행 적용하지 않는다.

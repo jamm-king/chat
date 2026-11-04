@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     oauth_cookie_secure: bool = False
     notion_timeout_seconds: float = Field(default=15, gt=0, le=60)
     notion_api_version: Literal["2026-03-11"] = "2026-03-11"
+    ingestion_timeout_seconds: float = Field(default=600, gt=0, le=600)
 
     @field_validator("token_encryption_key")
     @classmethod
