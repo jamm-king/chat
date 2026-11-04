@@ -1,9 +1,11 @@
+import json
 import threading
 from uuid import uuid4
 
 import httpx
 import pytest
 from langchain_core.documents import Document
+from langchain_openai import OpenAIEmbeddings
 from pydantic import SecretStr, ValidationError
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
@@ -12,7 +14,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateTable
 
 from app.db import NotionResource, ResourceChunk, ResourceIndex
-from app.embeddings import EmbeddingError, OpenAIEmbeddingClient
+from app.embeddings import EmbeddingError, OpenAIEmbeddingClient, validate_vectors
 from app.indexing import DocumentIndexer
 from test_ingestions import HEADERS, body, finished, ingestion_app, poll, submit
 from test_notion_pages import USER_ID
@@ -212,7 +214,7 @@ def test_chunking_preserves_text_and_offsets(indexed_app):
     assert "embedding VECTOR" in sql
 
 
-def test_openai_adapter_preserves_batch_order_and_uses_float_format(indexed_app):
+def test_langchain_openai_adapter_passes_text_and_configuration(indexed_app):
     client, _, _, _, _ = indexed_app
     settings = client.app.state.settings.model_copy(update={"openai_api_key": SecretStr("secret-key")})
     calls = []
@@ -220,35 +222,67 @@ def test_openai_adapter_preserves_batch_order_and_uses_float_format(indexed_app)
     def handler(request):
         calls.append(request)
         return httpx.Response(200, json={"data": [
-            {"index": 1, "embedding": [0, 1, 0]}, {"index": 0, "embedding": [1, 0, 0]},
+            {"index": 0, "embedding": [1, 0, 0]}, {"index": 1, "embedding": [0, 1, 0]},
         ]})
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as http:
-        result = OpenAIEmbeddingClient(settings, http).embed_documents(["first", "second"])
+        adapter = OpenAIEmbeddingClient(settings, http)
+        assert isinstance(adapter.embeddings, OpenAIEmbeddings)
+        assert adapter.embeddings.max_retries == 0
+        assert adapter.embeddings.request_timeout == settings.embedding_timeout_seconds
+        assert adapter.embeddings.check_embedding_ctx_length is False
+        result = adapter.embed_documents(["first", "second"])
     assert result == [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
     assert calls[0].url == "https://api.openai.com/v1/embeddings"
     assert calls[0].headers["Authorization"] == "Bearer secret-key"
     assert b'"encoding_format":"float"' in calls[0].content
+    assert json.loads(calls[0].content) == {
+        "input": ["first", "second"], "model": settings.embedding_model,
+        "dimensions": settings.embedding_dimensions, "encoding_format": "float",
+    }
 
 
 @pytest.mark.parametrize("payload", [
     {"data": [{"index": 0, "embedding": [1]}]},
     {"data": [{"index": 0, "embedding": [0, 0, 0]}]},
-    {"data": [{"index": 0, "embedding": [True, 0, 0]}]},
+    {"data": [{"index": 0, "embedding": None}]},
     {"data": [{"index": 0, "embedding": [float('inf'), 0, 0]}]},
-    {"data": [{"index": 1, "embedding": [1, 0, 0]}]},
+    {"data": [{"index": 0}]},
     {"data": []},
 ])
 def test_invalid_embedding_responses_are_rejected(indexed_app, payload):
     client, _, _, _, _ = indexed_app
     settings = client.app.state.settings.model_copy(update={"openai_api_key": SecretStr("secret-key")})
     def handler(request):
-        if payload["data"] and any(value == float('inf') for value in payload['data'][0]['embedding']):
+        if payload["data"] and any(value == float('inf') for value in (payload['data'][0].get('embedding') or [])):
             return httpx.Response(200, content=b'{"data":[{"index":0,"embedding":[Infinity,0,0]}]}')
         return httpx.Response(200, json=payload)
     with httpx.Client(transport=httpx.MockTransport(handler)) as http:
         with pytest.raises(EmbeddingError):
             OpenAIEmbeddingClient(settings, http).embed_documents(["text"])
+
+
+def test_vector_validation_rejects_booleans():
+    with pytest.raises(EmbeddingError):
+        validate_vectors([[True, 0, 0]], 1, 3)
+
+
+@pytest.mark.parametrize("failure", [httpx.ConnectError, httpx.ReadTimeout])
+def test_langchain_connection_failures_are_sanitized_without_retry(indexed_app, failure):
+    client, _, _, _, _ = indexed_app
+    settings = client.app.state.settings.model_copy(update={"openai_api_key": SecretStr("secret-key")})
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        raise failure("secret-key private body", request=request)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as http:
+        with pytest.raises(EmbeddingError) as error:
+            OpenAIEmbeddingClient(settings, http).embed_documents(["text"])
+    assert error.value.retryable is True
+    assert "secret-key" not in str(error.value)
+    assert len(calls) == 1
 
 
 def test_configuration_bounds(indexed_app):
