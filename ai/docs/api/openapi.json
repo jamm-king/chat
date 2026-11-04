@@ -75,6 +75,12 @@
               },
               "Retry-After": {
                 "$ref": "#/components/headers/RetryAfter"
+              },
+              "Location": {
+                "description": "작업 조회 상대 URL(userId query 포함).",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -131,9 +137,6 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
           "404": {
             "description": "CONNECTION_NOT_FOUND / RESOURCE_NOT_FOUND: 연결·부모 자료가 없거나 사용자의 접근 범위에 없음",
             "headers": {
@@ -176,20 +179,11 @@
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
-          "502": {
-            "$ref": "#/components/responses/ProviderError"
-          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "504": {
-            "$ref": "#/components/responses/ServiceTimeout"
           }
         },
         "x-implementation-status": "implemented-indexing-when-enabled"
@@ -248,9 +242,6 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
           "404": {
             "description": "JOB_NOT_FOUND",
             "headers": {
@@ -269,20 +260,8 @@
               }
             }
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/ProviderError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          },
-          "504": {
-            "$ref": "#/components/responses/ServiceTimeout"
           }
         },
         "x-implementation-status": "implemented-indexing-when-enabled"
@@ -331,17 +310,8 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/ProviderError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -401,9 +371,6 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
           "404": {
             "description": "RESOURCE_NOT_FOUND",
             "headers": {
@@ -423,7 +390,7 @@
             }
           },
           "409": {
-            "description": "RESOURCE_NOT_READY / RESOURCE_SCOPE_CHANGED",
+            "description": "RESOURCE_NOT_READY / RESOURCE_SCOPE_CHANGED / OPERATION_NOT_AVAILABLE",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -445,9 +412,6 @@
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -472,7 +436,7 @@
           "Answers"
         ],
         "summary": "일반 또는 자료 기반 동기 답변 생성",
-        "description": "멱등성·대화 저장·스트리밍 없음. 현재 질문은 message에만 전달. history는 완료 턴 최대 20개, 전체 입력 텍스트 32,000자 이하. RESOURCE의 빈 범위는 INSUFFICIENT_EVIDENCE. GENERAL에서 resourceIds 금지. 처리 기한 60초. 상세: references.md.",
+        "description": "멱등성·대화 저장·스트리밍 없음. 현재 질문은 message에만 전달. history는 완료 USER/ASSISTANT 메시지 최대 20개(10쌍), 전체 입력 텍스트 32,000자 이하. RESOURCE의 빈 범위는 INSUFFICIENT_EVIDENCE. GENERAL에서 resourceIds 금지. 처리 기한 60초. 상세: references.md.",
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
@@ -513,9 +477,6 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
           "404": {
             "description": "RESOURCE_NOT_FOUND (RESOURCE 모드)",
             "headers": {
@@ -535,7 +496,7 @@
             }
           },
           "409": {
-            "description": "RESOURCE_NOT_READY / RESOURCE_SCOPE_CHANGED (RESOURCE 모드)",
+            "description": "OPERATION_NOT_AVAILABLE (GENERAL/RESOURCE); RESOURCE_NOT_READY / RESOURCE_SCOPE_CHANGED (RESOURCE)",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -557,9 +518,6 @@
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -619,7 +577,6 @@
                   "INVALID_REQUEST",
                   "CONTEXT_LIMIT_EXCEEDED",
                   "UNAUTHORIZED",
-                  "FORBIDDEN",
                   "RESOURCE_NOT_FOUND",
                   "JOB_NOT_FOUND",
                   "RESOURCE_NOT_READY",
@@ -628,9 +585,7 @@
                   "RESOURCE_ALREADY_INDEXED",
                   "RESOURCE_DELETED",
                   "RESOURCE_SCOPE_CHANGED",
-                  "PAYLOAD_TOO_LARGE",
                   "UNSUPPORTED_MEDIA_TYPE",
-                  "RATE_LIMITED",
                   "AI_PROVIDER_ERROR",
                   "AI_SERVICE_UNAVAILABLE",
                   "AI_SERVICE_TIMEOUT",
@@ -745,7 +700,6 @@
               "NOTION_UNAVAILABLE",
               "NOTION_OVERLOADED",
               "NOTION_INVALID_RESPONSE",
-              "CONTENT_EXTRACTION_FAILED",
               "CONTENT_INCOMPLETE",
               "EMPTY_CONTENT",
               "EMBEDDING_FAILED",
@@ -756,7 +710,8 @@
               "CONNECTION_NOT_FOUND",
               "RESOURCE_NOT_FOUND",
               "INVALID_PARENT_REFERENCE",
-              "NOTION_INVALID_REQUEST"
+              "NOTION_INVALID_REQUEST",
+              "RESOURCE_ID_CONFLICT"
             ]
           },
           "message": {
@@ -1724,26 +1679,8 @@
           }
         }
       },
-      "Forbidden": {
-        "description": "FORBIDDEN",
-        "headers": {
-          "X-Request-Id": {
-            "$ref": "#/components/headers/RequestId"
-          },
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          }
-        },
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorResponse"
-            }
-          }
-        }
-      },
       "PayloadTooLarge": {
-        "description": "PAYLOAD_TOO_LARGE",
+        "description": "REQUEST_TOO_LARGE: POST body exceeds 256 KiB",
         "headers": {
           "X-Request-Id": {
             "$ref": "#/components/headers/RequestId"
@@ -1768,27 +1705,6 @@
           },
           "Cache-Control": {
             "$ref": "#/components/headers/CacheControl"
-          }
-        },
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorResponse"
-            }
-          }
-        }
-      },
-      "RateLimited": {
-        "description": "RATE_LIMITED",
-        "headers": {
-          "X-Request-Id": {
-            "$ref": "#/components/headers/RequestId"
-          },
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          },
-          "Retry-After": {
-            "$ref": "#/components/headers/RetryAfter"
           }
         },
         "content": {
@@ -1843,9 +1759,6 @@
           },
           "Cache-Control": {
             "$ref": "#/components/headers/CacheControl"
-          },
-          "Retry-After": {
-            "$ref": "#/components/headers/RetryAfter"
           }
         },
         "content": {

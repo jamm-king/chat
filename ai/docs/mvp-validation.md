@@ -1,8 +1,8 @@
 # AI 기능 검증 계획
 
-2026-11-03 · [Backend–AI 계약](architecture/backend-ai-contract.md) 기준
+2026-11-04 · [Backend–AI 계약](architecture/backend-ai-contract.md) 기준
 
-## 현재 검증과 후속 검증 구분
+## 현재 구현과 실제 통합 검증 구분
 
 현재 구현은 OAuth, 연결별 페이지 검색·미리보기, 공통 자료 ID의 COLLECT 비동기 수집·저장·참조 선택 등록이다. 자료 삭제·진행 작업 취소도 구현돼 있다. 청킹·임베딩·색인도 구현됐고 설정 활성화가 필요하다. RAG 검색·답변도 구현돼 있고 RAG_ENABLED 활성화가 필요하다. 모의 공급자·SQLite 계약 테스트와 실제 Docker pgvector 검증을 수행한다. 실제 Notion·OpenAI 모델 호출·답변 품질 평가는 별도로 구분한다.
 
