@@ -19,6 +19,8 @@ from sqlalchemy.orm import sessionmaker
 from starlette.concurrency import run_in_threadpool
 
 from app.config import Settings
+from app.embeddings import EmbeddingClient, OpenAIEmbeddingClient
+from app.indexing import DocumentIndexer
 from app.ingestion import IngestionManager
 from app.ingestion_api import create_ingestion_router, error_response, internal_headers, is_internal_request
 from app.resource_api import create_resource_router
@@ -41,7 +43,8 @@ bearer = HTTPBearer(auto_error=False)
 
 
 def create_app(settings: Settings | None = None, *, engine: Engine | None = None,
-               notion_client: httpx.Client | None = None) -> FastAPI:
+               notion_client: httpx.Client | None = None,
+               embedding_client: EmbeddingClient | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         config = settings or Settings()
@@ -56,12 +59,21 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
         app.state.sessions = sessionmaker(db_engine, expire_on_commit=False)
         app.state.oauth_states = OAuthStateStore()
         app.state.notion_client = client
-        app.state.ingestions = IngestionManager(config, app.state.sessions, client)
+        embedding_http = None
+        embedder = embedding_client
+        if config.indexing_enabled and embedder is None:
+            embedding_http = httpx.Client(timeout=config.embedding_timeout_seconds,
+                                           transport=httpx.HTTPTransport(retries=0), follow_redirects=False)
+            embedder = OpenAIEmbeddingClient(config, embedding_http)
+        indexer = DocumentIndexer(config, embedder) if embedder is not None else None
+        app.state.ingestions = IngestionManager(config, app.state.sessions, client, indexer)
         try:
-            await run_in_threadpool(init_db, db_engine)
+            app.state.ingestions.vector_storage_available = await run_in_threadpool(init_db, db_engine, indexer is not None)
             yield
         finally:
             await app.state.ingestions.shutdown()
+            if embedding_http is not None:
+                embedding_http.close()
             if notion_client is None:
                 client.close()
             if engine is None:

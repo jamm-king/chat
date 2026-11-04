@@ -3,7 +3,7 @@
   "info": {
     "title": "AI Service Internal API",
     "version": "2.0.0",
-    "description": "COLLECT 비동기 접수·조회와 사용자별 자료 삭제·진행 작업 취소 구현. COLLECT_AND_INDEX·검색·답변은 목표 계약·미구현. Backend 공통 resourceId와 COLLECTED/READY 구분. 삭제 표시는 단일 프로세스 메모리이며 영속 복구는 제외."
+    "description": "COLLECT·COLLECT_AND_INDEX·자료 삭제 구현. INDEXING_ENABLED와 OpenAI 키·pgvector 준비 시 청킹·임베딩·원자적 색인 공개를 수행한다. RAG 검색·답변은 미구현. Backend 공통 resourceId, COLLECTED/READY 구분."
   },
   "servers": [
     {
@@ -37,8 +37,8 @@
         "tags": [
           "Ingestions"
         ],
-        "summary": "선택한 Notion 페이지의 비동기 수집·색인 접수 (COLLECT 구현)",
-        "description": "Backend가 userId·resourceId·jobId·connectionId·pageId·operation을 전달. AI가 소유권·ID 충돌을 검사하고 본문 수집 전에 202를 반환. COLLECT 성공은 COLLECTED, COLLECT_AND_INDEX 성공은 READY. 색인 기능 미구현 시 후자는 OPERATION_NOT_AVAILABLE로 거절. 자동 재귀 수집·URL 스크래핑 없음. 초기 메모리 작업 관리·재시작 유실 허용. references.md 참조.",
+        "summary": "선택한 Notion 페이지의 비동기 수집·색인 접수 (색인 설정 시 COLLECT_AND_INDEX 지원)",
+        "description": "Backend가 userId·resourceId·jobId·connectionId·pageId·operation을 전달. AI가 소유권·ID 충돌을 검사하고 본문 수집 전에 202를 반환. COLLECT 성공은 COLLECTED, COLLECT_AND_INDEX 성공은 READY. 색인 설정 비활성 시 후자는 OPERATION_NOT_AVAILABLE로 거절. 자동 재귀 수집·URL 스크래핑 없음. 초기 메모리 작업 관리·재시작 유실 허용. references.md 참조.",
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
@@ -192,7 +192,7 @@
             "$ref": "#/components/responses/ServiceTimeout"
           }
         },
-        "x-implementation-status": "implemented-collect-only"
+        "x-implementation-status": "implemented-indexing-when-enabled"
       }
     },
     "/internal/v1/ingestions/{jobId}": {
@@ -285,7 +285,7 @@
             "$ref": "#/components/responses/ServiceTimeout"
           }
         },
-        "x-implementation-status": "implemented-collect-only"
+        "x-implementation-status": "implemented-indexing-when-enabled"
       }
     },
     "/internal/v1/resources/{resourceId}": {
@@ -295,7 +295,7 @@
           "Resources"
         ],
         "summary": "자료 삭제 및 진행 중 수집 작업 취소",
-        "description": "사용자 범위의 원본·본문·참조 행 삭제 후 204. 반복·없는 자료·다른 사용자 자료에도 204이며 타 사용자 데이터는 변경하지 않는다. 진행 작업은 CANCELLED/DELETED, RESOURCE_DELETED. 수집 완료와 삭제를 직렬화해 재저장 방지. 자식은 유지·부모 연결 해제. 물리 삭제 실패는 503, 10초 초과는 504이며 메모리 제외 유지. 성공/실패로 이미 끝난 작업은 과거 결과로 유지한다. 현재 청크·벡터·RAG 검색은 미구현. 재시작 후 메모리 삭제 이력 유실, Backend는 DELETED 제외 유지. references.md 참조.",
+        "description": "사용자 범위의 원본·본문·참조 행 삭제 후 204. 반복·없는 자료·다른 사용자 자료에도 204이며 타 사용자 데이터는 변경하지 않는다. 진행 작업은 CANCELLED/DELETED, RESOURCE_DELETED. 수집 완료와 삭제를 직렬화해 재저장 방지. 자식은 유지·부모 연결 해제. 물리 삭제 실패는 503, 10초 초과는 504이며 메모리 제외 유지. 성공/실패로 이미 끝난 작업은 과거 결과로 유지한다. 현재 원본·본문·참조·청크·벡터·색인 완료 레코드를 함께 삭제한다. RAG 검색은 미구현. 재시작 후 메모리 삭제 이력 유실, Backend는 DELETED 제외 유지. references.md 참조.",
         "parameters": [
           {
             "name": "resourceId",
@@ -1878,5 +1878,5 @@
     "description": "호출 방법과 정책 설명",
     "url": "./references.md"
   },
-  "x-implementation-status": "collect-and-resource-deletion-implemented"
+  "x-implementation-status": "collection-indexing-deletion-implemented"
 }
