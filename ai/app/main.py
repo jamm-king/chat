@@ -9,6 +9,9 @@ from cryptography.fernet import InvalidToken
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy import create_engine, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
@@ -16,6 +19,8 @@ from sqlalchemy.orm import sessionmaker
 from starlette.concurrency import run_in_threadpool
 
 from app.config import Settings
+from app.ingestion import IngestionManager
+from app.ingestion_api import create_ingestion_router, error_response, ingestion_headers
 from app.db import NotionConnection, NotionResource, get_connection, init_db, save_connection
 from app.resources import get_resource, register_resource
 from app.loader import load_page, summarize_page
@@ -50,16 +55,36 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
         app.state.sessions = sessionmaker(db_engine, expire_on_commit=False)
         app.state.oauth_states = OAuthStateStore()
         app.state.notion_client = client
+        app.state.ingestions = IngestionManager(config, app.state.sessions, client)
         try:
             await run_in_threadpool(init_db, db_engine)
             yield
         finally:
+            await app.state.ingestions.shutdown()
             if notion_client is None:
                 client.close()
             if engine is None:
                 db_engine.dispose()
 
     app = FastAPI(title="찾", lifespan=lifespan)
+    app.middleware("http")(ingestion_headers)
+
+    @app.exception_handler(StarletteHTTPException)
+    async def handle_http_error(request: Request, exc: StarletteHTTPException):
+        if request.url.path.startswith("/internal/v1/ingestions"):
+            code = {401: "UNAUTHORIZED", 404: "JOB_NOT_FOUND"}.get(exc.status_code, "INVALID_REQUEST")
+            response = error_response(request, exc.status_code, code, "Request is not authorized" if exc.status_code == 401 else str(exc.detail))
+            if exc.headers:
+                response.headers.update(exc.headers)
+            return response
+        return await http_exception_handler(request, exc)
+
+    @app.exception_handler(RequestValidationError)
+    async def handle_validation_error(request: Request, exc: RequestValidationError):
+        if request.url.path.startswith("/internal/v1/ingestions"):
+            details = [{"field": ".".join(map(str, item["loc"])), "reason": item["type"]} for item in exc.errors()]
+            return error_response(request, 400, "INVALID_REQUEST", "Invalid ingestion request", details=details)
+        return await request_validation_exception_handler(request, exc)
 
     @app.exception_handler(NotionApiError)
     async def notion_error_handler(request: Request, error: NotionApiError):
@@ -80,6 +105,8 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
             credentials.credentials.encode(), config.ai_service_token.get_secret_value().encode()
         ):
             raise HTTPException(401, "Invalid service token", headers={"WWW-Authenticate": "Bearer"})
+
+    app.include_router(create_ingestion_router(require_service_token))
 
     def get_notion_client(
         request: Request, connection_id: UUID,
@@ -133,6 +160,7 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
 
     @app.post("/integrations/notion/connections/{connection_id}/resources",
               response_model=NotionResourceResponse, status_code=201,
+              deprecated=True,
               summary="Register one page, optionally as a selected reference of a parent")
     def create_resource(
         request: Request, connection_id: UUID, body: RegisterNotionResourceRequest,

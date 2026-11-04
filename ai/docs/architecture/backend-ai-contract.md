@@ -1,6 +1,6 @@
 # Backend–AI 연동 구조와 확정 계약
 
-2026-11-03 · 목표 명세. 이 문서 작성만으로 API가 구현되거나 배포되는 것은 아니다.
+2026-11-04 · COLLECT 접수·조회 구현. 색인·검색·삭제는 목표 명세다.
 
 ## 문서 적용 범위
 
@@ -10,7 +10,7 @@
 - 목표 비동기 API: [API 계약](../api/references.md), [정적 OpenAPI](../api/openapi.json)
 - 현재 구현의 정확한 HTTP 스키마: 실행 중 AI 서버의 `/openapi.json`
 
-정적 OpenAPI는 목표 계약이며 런타임 OpenAPI와 동일하지 않다. Backend의 프론트 명세와 DB 모델도 아래 상태·입력·ID 정책에 맞춰 후속 변경이 필요하다.
+정적 OpenAPI는 구현된 COLLECT와 미구현 목표 계약을 함께 표시하며 런타임 OpenAPI와 동일하지 않다. Backend의 프론트 명세와 DB 모델도 아래 상태·입력·ID 정책에 맞춰 후속 변경이 필요하다.
 
 ## 1. 책임과 현재 구현
 
@@ -26,8 +26,8 @@ Frontend는 Backend만 호출한다. `AI_SERVICE_TOKEN`과 Notion 토큰은 Fron
 | --- | --- | --- |
 | OAuth | AI 처리 및 Backend 쿠키·콜백 중계 구현 | 현행 유지 |
 | 페이지 선택 | AI 검색·미리보기 구현 | Backend 경유 UI 연결 |
-| 수집·저장 | AI가 동기로 조회·저장, 자체 자료 UUID 발급, HTTP 201 | 공통 자료 ID로 비동기 작업 접수, HTTP 202 |
-| 작업 API | 미구현 | 작업 조회·종료 결과 제공 |
+| 수집·저장 | 공통 자료 ID로 COLLECT 비동기 접수·저장, HTTP 202 | 구현됨. 기존 HTTP 201 동기 경로는 deprecated |
+| 작업 API | 메모리 작업 조회·종료 결과 제공 | COLLECT 구현, 재시작 복구 제외 |
 | 청킹·임베딩·RAG 검색 | 미구현 | 색인 공개 후에만 READY |
 | AI 자료 삭제 | 미구현 | 검색 차단 후 원본·본문·참조·청크·벡터 삭제 |
 
@@ -61,7 +61,7 @@ Frontend → Backend → AI: 사용자별 연결 목록 조회
 - `pageId`: Notion 원본 페이지 ID. 서비스 자료 ID와 별개.
 - `parentResourceId`: 찾 서비스 내부의 자료 계층. Notion 원본 계층을 그대로 복제하지 않음.
 
-목표 구조에서는 `ai_resource_id`를 별도 저장하지 않는다. 현재 AI 자체 ID로 저장한 자료는 Backend 공통 ID로 이관하거나 재등록하는 전환 작업이 필요하다. 현재 UUID를 자동으로 Backend ID와 동일하다고 간주하면 안 된다.
+목표 구조에서는 `ai_resource_id`를 별도 저장하지 않는다. 기존 동기 경로에서 AI 자체 ID로 저장한 자료는 Backend 공통 ID로 이관하거나 재등록하는 전환 작업이 필요하다. 현재 UUID를 자동으로 Backend ID와 동일하다고 간주하면 안 된다.
 
 ## 4. 비동기 작업과 완료 의미
 
@@ -72,7 +72,7 @@ Backend는 자료를 PROCESSING으로 만들고 AI에 작업을 요청한다. AI
 | COLLECT | 선택한 한 페이지의 원본·본문·참조 저장 | 작업 SUCCEEDED, 자료 COLLECTED, ready=false |
 | COLLECT_AND_INDEX | 수집 후 청킹·임베딩·색인 공개 | 작업 SUCCEEDED, 자료 READY, ready=true |
 
-현재 수집 검증 단계의 다음 구현 대상은 COLLECT다. 색인 구현 전 COLLECT_AND_INDEX 요청은 `409 OPERATION_NOT_AVAILABLE`로 거절하며 본문 저장만으로 성공 처리하지 않는다.
+현재 COLLECT가 구현돼 있다. 색인 구현 전 COLLECT_AND_INDEX 요청은 `409 OPERATION_NOT_AVAILABLE`로 거절하며 본문 저장만으로 성공 처리하지 않는다.
 
 ### 자료 상태
 

@@ -3,7 +3,7 @@
   "info": {
     "title": "AI Service Internal API",
     "version": "2.0.0",
-    "description": "목표 계약·미구현: OAuth 연결 기반 비동기 수집·색인·검색·삭제. Backend 공통 resourceId, COLLECT/COLLECT_AND_INDEX, 자료 COLLECTED/READY 구분. 현행 OAuth·동기 API는 런타임 OpenAPI와 notion-oauth.md 참조. 기준: ../architecture/backend-ai-contract.md."
+    "description": "COLLECT 비동기 접수·조회 구현. COLLECT_AND_INDEX·검색·답변·삭제는 목표 계약·미구현. Backend 공통 resourceId, COLLECTED/READY 구분. 현행 OAuth·동기 API는 런타임 OpenAPI와 notion-oauth.md 참조."
   },
   "servers": [
     {
@@ -37,7 +37,7 @@
         "tags": [
           "Ingestions"
         ],
-        "summary": "선택한 Notion 페이지의 비동기 수집·색인 접수 (목표)",
+        "summary": "선택한 Notion 페이지의 비동기 수집·색인 접수 (COLLECT 구현)",
         "description": "Backend가 userId·resourceId·jobId·connectionId·pageId·operation을 전달. AI가 소유권·ID 충돌을 검사하고 본문 수집 전에 202를 반환. COLLECT 성공은 COLLECTED, COLLECT_AND_INDEX 성공은 READY. 색인 기능 미구현 시 후자는 OPERATION_NOT_AVAILABLE로 거절. 자동 재귀 수집·URL 스크래핑 없음. 초기 메모리 작업 관리·재시작 유실 허용. references.md 참조.",
         "parameters": [
           {
@@ -191,7 +191,8 @@
           "504": {
             "$ref": "#/components/responses/ServiceTimeout"
           }
-        }
+        },
+        "x-implementation-status": "implemented-collect-only"
       }
     },
     "/internal/v1/ingestions/{jobId}": {
@@ -283,7 +284,8 @@
           "504": {
             "$ref": "#/components/responses/ServiceTimeout"
           }
-        }
+        },
+        "x-implementation-status": "implemented-collect-only"
       }
     },
     "/internal/v1/resources/{resourceId}": {
@@ -634,7 +636,8 @@
                   "RESOURCE_ALREADY_COLLECTED",
                   "RESOURCE_ID_CONFLICT",
                   "INVALID_PARENT_REFERENCE",
-                  "CONNECTION_NOT_FOUND"
+                  "CONNECTION_NOT_FOUND",
+                  "REQUEST_TOO_LARGE"
                 ]
               },
               "message": {
@@ -744,7 +747,11 @@
               "INDEX_WRITE_FAILED",
               "INGESTION_TIMEOUT",
               "RESOURCE_DELETED",
-              "INTERNAL_ERROR"
+              "INTERNAL_ERROR",
+              "CONNECTION_NOT_FOUND",
+              "RESOURCE_NOT_FOUND",
+              "INVALID_PARENT_REFERENCE",
+              "NOTION_INVALID_REQUEST"
             ]
           },
           "message": {
@@ -1868,5 +1875,5 @@
     "description": "호출 방법과 정책 설명",
     "url": "./references.md"
   },
-  "x-implementation-status": "target-not-implemented"
+  "x-implementation-status": "partial-collect-implemented"
 }
