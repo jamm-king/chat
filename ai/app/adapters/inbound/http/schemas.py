@@ -2,7 +2,8 @@ from datetime import datetime
 from uuid import UUID
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field
+from app.adapters.outbound.notion.models import NotionPageSummary, NotionContentWarning, NotionReference
 
 
 class AuthorizationRequest(BaseModel):
@@ -13,14 +14,6 @@ class AuthorizationRequest(BaseModel):
 
 class AuthorizationResponse(BaseModel):
     authorization_url: str
-
-
-class NotionTokenResponse(BaseModel):
-    access_token: SecretStr = Field(min_length=1)
-    refresh_token: SecretStr | None = None
-    bot_id: UUID
-    workspace_id: UUID
-    workspace_name: str | None = None
 
 
 class ConnectionResponse(BaseModel):
@@ -34,30 +27,10 @@ class ConnectionResponse(BaseModel):
     status: str = "connected"
 
 
-class NotionPageSummary(BaseModel):
-    id: UUID
-    title: str | None
-    url: str
-    last_edited_time: datetime
-
-
 class NotionPageListResponse(BaseModel):
     results: list[NotionPageSummary]
     has_more: bool
     next_cursor: str | None
-
-
-class NotionContentWarning(BaseModel):
-    code: str
-    message: str
-
-
-class NotionReference(BaseModel):
-    kind: Literal["page", "database", "video", "image", "audio", "file"]
-    title: str | None
-    url: str
-    page_id: UUID | None = None
-    can_register: bool = False
 
 
 class NotionPageResponse(NotionPageSummary):

@@ -6,7 +6,7 @@
 
 사용자가 OAuth로 연결한 워크스페이스에서 페이지를 선택하면 AI가 해당 연결의 토큰으로 Notion 공식 API를 호출한다. 공개 여부보다 연결의 접근 권한이 기준이다. 공개 URL 스크래핑, HTML 추출, 브라우저 렌더링을 전제로 한 2026-10-29 설계는 대체됐다.
 
-현재 `app/loader.py`의 `load_page(client, page_id)`가 페이지 정보와 Markdown을 조회해 `list[langchain_core.documents.Document]`를 반환한다. 현재 동기 등록은 `app/resources.py`에서 원본·본문·참조를 저장한다. COLLECT 비동기 접수·조회는 app/ingestion.py와 app/ingestion_api.py에 구현돼 있다. 기존 동기 등록은 deprecated이며 COLLECT_AND_INDEX 청킹·임베딩·pgvector 저장도 구현됐다. 설정은 [색인 안내](indexing.md)를 따른다. 삭제 시 진행 중 수집은 CANCELLED가 되고 늦은 조회 결과를 저장하지 않는다.
+현재 `app/adapters/outbound/notion/loader.py`의 `load_page(client, page_id)`가 페이지 정보와 Markdown을 조회해 `list[langchain_core.documents.Document]`를 반환한다. 현재 동기 등록은 `app/adapters/inbound/http/registration.py`에서 원본·본문·참조를 저장한다. COLLECT 비동기 접수·조회는 app/application/use_cases/ingestion.py와 app/adapters/inbound/http/ingestions.py에 구현돼 있다. 기존 동기 등록은 deprecated이며 COLLECT_AND_INDEX 청킹·임베딩·pgvector 저장도 구현됐다. 설정은 [색인 안내](indexing.md)를 따른다. 삭제 시 진행 중 수집은 CANCELLED가 되고 늦은 조회 결과를 저장하지 않는다.
 
 ## 수집·색인 흐름
 
@@ -14,7 +14,7 @@
 Backend: userId·resourceId·jobId·connectionId·pageId·operation 전달
 AI: 소유권 확인 → 작업 등록 → 202 반환
   ↓ 접수 응답 후 같은 프로세스에서 비동기 실행 가능
-NotionClient → load_page → Document 목록
+NotionClient → load_page → NotionDocumentSource → TextDocument
   → 원본·본문·참조 저장 → EXTRACTED
   ├─ COLLECT: SUCCEEDED / 자료 COLLECTED
   └─ COLLECT_AND_INDEX: 청킹 → 임베딩 → 색인 공개
@@ -36,13 +36,13 @@ NotionClient → load_page → Document 목록
 | metadata.references | 페이지·DB·미디어 참조 목록 |
 | metadata.content_status / truncated / unknown_block_ids / warnings | 본문 완전성 진단 |
 
-현재는 한 페이지를 Document 하나로 반환하며 raw_content와 page_content가 같다. 원본·검색용 본문 필드는 구분하되 정제는 아직 하지 않는다. 별도 공통 문서 클래스를 도입하지 않는다.
+현재는 한 페이지를 Document 하나로 반환하며 raw_content와 page_content가 같다. 원본·검색용 본문 필드는 구분하되 정제는 아직 하지 않는다. 애플리케이션 경계에서는 자체 TextDocument로 변환한다. LangChain Document를 코어에 전달하지 않는다. 구체적인 계층은 [헥사고날 구조](hexagonal.md)를 따른다.
 
 목표 저장 시 userId·resourceId는 Backend 요청에서 검증해 부여한다. 원본 문서에서 사용자·서비스 자료 ID를 읽지 않는다. 기존 AI 자체 UUID를 Backend 자료 ID로 자동 간주하지 않는다. 청크는 부모 resourceId와 출처 metadata를 보존한다.
 
 ## 참조 처리
 
-`app/references.py`는 Notion 확장 Markdown의 page/database/video 등 태그에서 참조를 추출한다. 현재 모든 일반 Markdown 링크를 페이지 참조로 해석하는 것은 아니다. 파싱된 페이지 참조의 can_register는 ID 해석 가능 여부이며 실제 접근 권한 보증이 아니다.
+`app/adapters/outbound/notion/references.py`는 Notion 확장 Markdown의 page/database/video 등 태그에서 참조를 추출한다. 현재 모든 일반 Markdown 링크를 페이지 참조로 해석하는 것은 아니다. 파싱된 페이지 참조의 can_register는 ID 해석 가능 여부이며 실제 접근 권한 보증이 아니다.
 
 참조는 자동 수집하지 않는다. Frontend가 보여준 참조를 사용자가 선택할 때만 새 자료·작업으로 등록한다. 부모 소유권·같은 연결·실제 참조 여부를 확인하고 자식 접근 권한을 다시 확인한다. 자식 실패는 부모를 변경하지 않는다. 찾의 parentResourceId는 서비스 계층이며 Notion 계층 복제가 아니다.
 

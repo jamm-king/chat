@@ -3,8 +3,8 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
-from app.db import NotionResource
-from app.references import extract_references
+from app.adapters.outbound.persistence.models import NotionResource
+from app.adapters.outbound.notion.references import extract_references
 from test_notion_pages import BASE, CONNECTION_ID, HEADERS, PAGE_ID, USER_ID, page_app
 
 RESOURCES = f"/integrations/notion/connections/{CONNECTION_ID}/resources"

@@ -9,7 +9,7 @@ from sqlalchemy import event, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.db import NotionResource
+from app.adapters.outbound.persistence.models import NotionResource
 from app.main import create_app
 from test_ingestions import HEADERS, body, finished, ingestion_app, poll, submit
 from test_notion_pages import CONNECTION_ID, PAGE_ID, USER_ID
@@ -80,7 +80,7 @@ def test_foreign_delete_does_not_change_owner_data_or_job(ingestion_app):
 @pytest.mark.parametrize("provider_status", [200, 500])
 def test_delete_during_fetch_cancels_and_prevents_late_save(ingestion_app, monkeypatch, provider_status):
     client, state, _, gate, started, engine = ingestion_app
-    import app.ingestion as ingestion
+    import app.adapters.outbound.notion.source as ingestion
     load_done = threading.Event()
     original = ingestion.load_page
 
@@ -137,7 +137,7 @@ def test_queued_job_does_not_start_after_deletion(ingestion_app, monkeypatch):
 
 def test_delete_after_commit_wins_without_recreating_data(ingestion_app, monkeypatch):
     client, _, _, _, _, engine = ingestion_app
-    import app.ingestion as ingestion
+    import app.adapters.outbound.persistence.resources as ingestion
     building, release, deleting = threading.Event(), threading.Event(), threading.Event()
     original_build = ingestion.build_resource
     manager = client.app.state.ingestions
@@ -265,7 +265,7 @@ def test_legacy_child_registration_does_not_restore_deleted_parent(ingestion_app
 
 def test_delete_timeout_does_not_report_success(ingestion_app, monkeypatch):
     client, _, _, _, _, _ = ingestion_app
-    import app.resource_api as resource_api
+    import app.adapters.inbound.http.resources as resource_api
     request = collect(client)
     release, done = threading.Event(), threading.Event()
     original = client.app.state.ingestions.delete

@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.domain.jobs import JobStatus, Operation, ResourceStatus
+
 
 class IngestionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -14,7 +16,7 @@ class IngestionRequest(BaseModel):
     connection_id: UUID = Field(alias="connectionId")
     page_id: UUID = Field(alias="pageId")
     parent_resource_id: UUID | None = Field(default=None, alias="parentResourceId")
-    operation: Literal["COLLECT", "COLLECT_AND_INDEX"]
+    operation: Operation
 
 
 class JobError(BaseModel):
@@ -37,9 +39,9 @@ class IngestionJob(BaseModel):
     jobId: UUID
     userId: UUID
     resourceId: UUID
-    operation: Literal["COLLECT", "COLLECT_AND_INDEX"]
-    status: Literal["QUEUED", "EXTRACTING", "EXTRACTED", "INDEXING", "SUCCEEDED", "FAILED", "CANCELLED"]
-    resourceStatus: Literal["PROCESSING", "COLLECTED", "READY", "FAILED", "DELETED"]
+    operation: Operation
+    status: JobStatus
+    resourceStatus: ResourceStatus
     createdAt: datetime
     startedAt: datetime | None = None
     completedAt: datetime | None = None

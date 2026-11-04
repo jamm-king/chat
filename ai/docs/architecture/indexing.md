@@ -35,7 +35,7 @@ LangChain RecursiveCharacterTextSplitter로 문단·줄·문장·공백 순서�
 
 임베딩은 `langchain_openai.OpenAIEmbeddings.embed_documents`로 호출한다. 직접 HTTP 요청·응답을 구성하지 않는다. 모델·차원·배치 수·타임아웃을 전달하고 `max_retries=0`으로 자동 재시도를 끈다. 이미 문자 단위로 분할한 청크가 추가 분할·평균화되지 않도록 `check_embedding_ctx_length=False`를 사용한다. 현재 청크 크기는 최대 2000자다. httpx는 LangChain/OpenAI SDK의 HTTP 전송과 앱 종료 시 연결 정리를 위해 주입한다. [LangChain 공식 연동 문서](https://docs.langchain.com/oss/python/integrations/embeddings/openai).
 
-부분 본문은 CONTENT_INCOMPLETE, 빈 텍스트는 EMPTY_CONTENT로 색인을 거절한다. 페이지·DB 참조는 수집하지 않고 원래 본문에 존재하는 텍스트만 분할한다. 입력 순서에 대응하는 벡터 반환은 LangChain에 맡기고, 반환된 벡터의 개수·차원·유한 수치·0이 아닌 값을 검사한다. 공급자 오류·키·응답 원문은 노출하지 않는다. 작업 상태·취소·최종 DB 트랜잭션은 앱이 관리하고, Document·청킹·임베딩은 LangChain을 사용한다.
+부분 본문은 CONTENT_INCOMPLETE, 빈 텍스트는 EMPTY_CONTENT로 색인을 거절한다. 페이지·DB 참조는 수집하지 않고 원래 본문에 존재하는 텍스트만 분할한다. 입력 순서에 대응하는 벡터 반환은 LangChain에 맡기고, 반환된 벡터의 개수·차원·유한 수치·0이 아닌 값을 검사한다. 공급자 오류·키·응답 원문은 노출하지 않는다. 작업 상태·취소는 애플리케이션 유스케이스가 관리하고 최종 DB 트랜잭션은 저장소 어댑터가 담당한다. 청킹·임베딩은 LangChain 어댑터가 구현하며 코어는 자체 TextDocument와 포트만 사용한다. [코드 구조](hexagonal.md)를 따른다.
 
 ## PostgreSQL 준비
 

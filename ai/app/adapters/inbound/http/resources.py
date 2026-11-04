@@ -4,9 +4,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
-from sqlalchemy.exc import SQLAlchemyError
+from app.domain.errors import StorageError
 
-from app.ingestion_api import error_response
+from app.adapters.inbound.http.ingestions import error_response
 
 DELETE_TIMEOUT_SECONDS = 10
 
@@ -24,7 +24,7 @@ def create_resource_router(require_service_token: Callable) -> APIRouter:
             )
         except TimeoutError:
             return error_response(request, 504, "RESOURCE_DELETE_TIMEOUT", "Resource deletion timed out", True)
-        except SQLAlchemyError:
+        except StorageError:
             return error_response(request, 503, "RESOURCE_DELETE_FAILED", "Resource deletion could not be completed", True)
         return Response(status_code=204)
 
