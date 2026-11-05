@@ -31,8 +31,8 @@ export default function LoginPage() {
     }
     return ( <main className="auth">
       <form className="auth-card" onSubmit={submit}>
-        <h1>chat</h1>
-        <p className="auth-sub">리서치 파트너 찾</p>
+        <h1>찾</h1>
+        <p className="auth-sub">리서치 파트너 chat</p>
         <label>
           이메일
           <input

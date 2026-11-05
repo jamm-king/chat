@@ -10,7 +10,7 @@
 .chat-side,
 .chat-main {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 3px;
   background: var(--card);
 }
 
@@ -52,7 +52,7 @@
 .chat-input input {
   padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   background: transparent;
   color: var(--text);
   font-size: 15px;
@@ -61,7 +61,7 @@
 .chat-input button {
   padding: 0 20px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 3px;
   background: var(--accent);
   color: var(--on-accent);
   font-weight: 700;
@@ -76,7 +76,7 @@
   justify-self: start;
   padding: 8px 14px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -86,7 +86,7 @@
   width: 100%;
   padding: 10px 14px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 3px;
   background: var(--accent);
   color: var(--on-accent);
   font-weight: 700;
@@ -107,7 +107,7 @@
   max-width: 70%;
   margin: 0;
   padding: 12px 16px;
-  border-radius: 10px;
+  border-radius: 3px;
   line-height: 1.5;
   white-space: pre-wrap;
 }

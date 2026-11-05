@@ -3,8 +3,8 @@
     --bg: #f6f4fb;/*바탕색*/
     --text: #1d1530;
     --muted: #8a7fa3;
-    --accent: #9d2cff; /*찾 프로젝트 메인 컬러: 네온 퍼플*/
-    --accent-soft: #f1e6ff;
+    --accent: #9147d1; /*찾 프로젝트 메인 컬러: 낮에는 채도를 낮춘 보라, 밤에는 네온 퍼플*/
+    --accent-soft: #f0e9f7;
     --line: #eee8f7;
     --card: rgba(255, 255, 255, 0.72);
     --on-accent: #ffffff;
@@ -22,17 +22,47 @@
     --danger: #ff8a80;
 }
 
+/* 고운돋움은 굵기가 한 가지뿐이라, 브라우저가 억지로 굵게 만들지 않도록 막는다 */
 body{
     margin: 0;
     background: var(--bg);
     color: var(--text);
+    font-family: "Gowun Dodum", "Malgun Gothic", sans-serif;
+    font-synthesis: none;
+}
+
+/* 단추와 입력 칸은 브라우저가 글꼴을 따로 정해서, 바깥 글꼴을 따르게 한다 */
+button,
+input {
+    font-family: inherit;
 }
 
 h1 {
     color: var(--accent);
 }
+/* 대화 화면 오른쪽 카드의 머리줄 안에 들어가도록 맞춘 위치 (카드 바깥 여백 20px + 머리줄 안쪽 여백 24px) */
 .theme-toggle {
   position: fixed;
-  top: 16px;
-  right: 16px;
+  top: 32px;
+  right: 44px;
+  z-index: 10;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+:root[data-theme="dark"] .theme-toggle {
+  border-color: var(--accent);
+}
+
+/* 야간 모드에서는 단추 둘레에 네온 빛이 살짝 번지게 한다 */
+:root[data-theme="dark"] button:not(:disabled) {
+  box-shadow: 0 0 2px rgba(196, 92, 255, 0.6), 0 0 12px rgba(196, 92, 255, 0.35);
 }
