@@ -15,6 +15,7 @@ Backend 는 로그인 사용자 확인 + AI 호출 + 쿠키/콜백 중계만 한
    결과에 따라 Frontend 화면(/notion/callback?status=...)으로 이동시킨다.
 4. Frontend → GET /api/v1/integrations/notion/connections 로 연결 상태를 확인한다.
 """
+from uuid import UUID
 import logging
 import os
 from typing import Optional
@@ -31,6 +32,8 @@ from app.schemas.notion import (
     NotionAuthorizeResponse,
     NotionConnectionListResponse,
     NotionConnectionResponse,
+    NotionPageListResponse,
+    NotionPageResponse,
 )
 from app.services import ai_client
 
@@ -142,6 +145,82 @@ def list_notion_connections(current_user: User = Depends(get_current_user)):
     return JSONResponse(
         body.model_dump(mode="json", by_alias=True),
         headers=NO_STORE,
+    )
+
+
+# 3. 노션 페이지 검색 (자료로 등록할 페이지 고르기)
+@api_router.get("/connections/{connection_id}/pages", response_model=NotionPageListResponse)
+def search_notion_pages(
+    connection_id: UUID,
+    query: Optional[str] = Query(default=None, max_length=1000),
+    start_cursor: Optional[str] = Query(default=None, alias="startCursor", min_length=1, max_length=1000),
+    page_size: int = Query(default=50, alias="pageSize", ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+):
+    params = {"userId": current_user.id, "pageSize": page_size}
+    if query:
+        params["query"] = query
+    if start_cursor:
+        params["startCursor"] = start_cursor
+
+    try:
+        upstream = ai_client.request(
+            "GET",
+            f"/integrations/notion/connections/{connection_id}/pages",
+            params=params,
+        )
+    except ai_client.AiServiceUnavailable:
+        upstream = None
+
+    if upstream is None or upstream.status_code != 200:
+        _raise_page_search_error(upstream)
+
+    data = upstream.json()
+    body = NotionPageListResponse(
+        pages=[
+            NotionPageResponse(
+                page_id=page["id"],
+                title=page.get("title"),
+                url=page.get("url"),
+                last_edited_time=page.get("last_edited_time"),
+            )
+            for page in data["results"]
+        ],
+        has_more=data["has_more"],
+        next_cursor=data.get("next_cursor"),
+    )
+    return JSONResponse(
+        body.model_dump(mode="json", by_alias=True),
+        headers=NO_STORE,
+    )
+
+
+def _raise_page_search_error(upstream: Optional[httpx.Response]):
+    """AI·노션 오류 → 명세 3.2.4 오류 코드."""
+    code = None
+    if upstream is not None:
+        try:
+            code = upstream.json().get("error", {}).get("code")
+        except ValueError:
+            pass
+
+        if upstream.status_code == 404:
+            raise AppError(status.HTTP_404_NOT_FOUND, "NOTION_CONNECTION_NOT_FOUND", "노션 연결을 찾을 수 없습니다.")
+        if code == "NOTION_REAUTHORIZATION_REQUIRED":
+            raise AppError(status.HTTP_409_CONFLICT, code, "노션 권한이 만료되었습니다. 노션을 다시 연결해주세요.")
+        if code == "NOTION_RATE_LIMITED":
+            raise AppError(
+                status.HTTP_429_TOO_MANY_REQUESTS, code, "노션 요청이 많습니다. 잠시 후 다시 시도해주세요.", retryable=True
+            )
+        logger.warning("notion page search failed: %s %s", upstream.status_code, code)
+    else:
+        logger.warning("notion page search failed: AI unavailable")
+
+    raise AppError(
+        status.HTTP_502_BAD_GATEWAY,
+        "RAG_SERVICE_UNAVAILABLE",
+        "노션 페이지를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.",
+        retryable=True,
     )
 
 
