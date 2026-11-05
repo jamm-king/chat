@@ -21,3 +21,17 @@ class NotionConnectionResponse(CamelModel):
 # 노션 연결 상태 조회 응답
 class NotionConnectionListResponse(CamelModel):
     connections: List[NotionConnectionResponse]
+
+
+# 노션 페이지 검색 결과 (명세 3.2.4)
+class NotionPageResponse(CamelModel):
+    page_id: str
+    title: Optional[str] = None
+    url: Optional[str] = None
+    last_edited_time: Optional[datetime] = None
+
+
+class NotionPageListResponse(CamelModel):
+    pages: List[NotionPageResponse]
+    has_more: bool
+    next_cursor: Optional[str] = None
