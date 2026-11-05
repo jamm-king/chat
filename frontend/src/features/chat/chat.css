@@ -184,3 +184,19 @@
   box-shadow: 0 0 8px #22c55e;
   vertical-align: middle;
 }
+.chat-guide-link {
+  display: block;
+  margin-top: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+:root[data-theme="dark"] button.chat-guide-link {
+  box-shadow: none;
+}

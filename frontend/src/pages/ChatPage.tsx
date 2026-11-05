@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { clearTokens, getAccessToken, getRefreshToken } from "../lib/auth";
 import "../features/chat/chat.css";
 import MessageBubble from "../features/chat/MessageBubble";
+import NotionGuide from "../features/notion/NotionGuide";
 
 type Message = {
     role: "USER" | "ASSISTANT";
@@ -17,6 +18,7 @@ type Connection = {
 export default function ChatPage() {
     const [connections, setConnections] = useState<Connection[]>([]);
     const navigate = useNavigate();
+    const [guideOpen, setGuideOpen] = useState(false);
     const [text, setText] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
     const [notionError, setNotionError] = useState("")
@@ -116,7 +118,12 @@ export default function ChatPage() {
                     )}
 
                     {notionError && <p className="chat-error">{notionError}</p>}
+                    <button type="button" className="chat-guide-link" onClick={() => setGuideOpen(true)}>
+                        노션 연결은 어떻게 하나요?
+                    </button>
+
                     <p>자료 목록 자리</p>
+
                 </div>
 
                 <button type="button" className="chat-logout" onClick={logout}>로그아웃</button>
@@ -137,6 +144,8 @@ export default function ChatPage() {
                     <button type="submit" disabled={!text.trim()}>보내기</button>
                 </form>
             </main>
+            {guideOpen && <NotionGuide onClose={() => setGuideOpen(false)} />}
+
         </div>
     );
 }

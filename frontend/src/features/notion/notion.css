@@ -1,0 +1,46 @@
+.guide-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(20, 10, 40, 0.35);
+}
+
+.guide {
+  width: 100%;
+  max-width: 460px;
+  padding: 22px 24px 20px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg);
+  box-shadow: 0 18px 50px rgba(20, 10, 40, 0.18);
+}
+
+.guide-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.guide-top h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: inherit;
+}
+
+.guide-close {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+:root[data-theme="dark"] .guide {
+  box-shadow: var(--neon-glow-soft);
+}
