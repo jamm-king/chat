@@ -60,7 +60,14 @@ class ResourceAnswerRequest(AnswerInput):
     _unique = field_validator("resourceIds")(unique_ids)
 
 
-AnswerRequest = Annotated[GeneralAnswerRequest | ResourceAnswerRequest, Field(discriminator="mode")]
+class AutoAnswerRequest(AnswerInput):
+    mode: Literal["AUTO"]
+    resourceIds: ResourceIds
+
+    _unique = field_validator("resourceIds")(unique_ids)
+
+
+AnswerRequest = Annotated[GeneralAnswerRequest | ResourceAnswerRequest | AutoAnswerRequest, Field(discriminator="mode")]
 
 
 class SourceLocator(InputModel):

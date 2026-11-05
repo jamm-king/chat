@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AI Service Internal API",
-    "version": "2.0.0",
-    "description": "수집·청킹·임베딩·pgvector 색인·삭제·사용자 범위 검색·일반/자료 기반 답변 구현. INDEXING_ENABLED와 RAG_ENABLED는 각각 활성화가 필요하다. Backend 공통 resourceId, COLLECTED/READY 구분."
+    "version": "2.1.0",
+    "description": "수집·청킹·임베딩·pgvector 색인·삭제·사용자 범위 검색·일반/자료 기반 답변 구현. INDEXING_ENABLED와 RAG_ENABLED는 각각 활성화가 필요하다. Backend 공통 resourceId, COLLECTED/READY 구분. AUTO 요청은 읽기 전용 검색 도구를 최대 1회 사용하며 응답 모드는 GENERAL/RESOURCE로 유지한다."
   },
   "servers": [
     {
@@ -436,7 +436,7 @@
           "Answers"
         ],
         "summary": "일반 또는 자료 기반 동기 답변 생성",
-        "description": "멱등성·대화 저장·스트리밍 없음. 현재 질문은 message에만 전달. history는 완료 USER/ASSISTANT 메시지 최대 20개(10쌍), 전체 입력 텍스트 32,000자 이하. RESOURCE의 빈 범위는 INSUFFICIENT_EVIDENCE. GENERAL에서 resourceIds 금지. 처리 기한 60초. 상세: references.md.",
+        "description": "멱등성·대화 저장·스트리밍 없음. 현재 질문은 message에만 전달. history는 완료 USER/ASSISTANT 메시지 최대 20개(10쌍), 전체 입력 텍스트 32,000자 이하. RESOURCE의 빈 범위는 INSUFFICIENT_EVIDENCE. GENERAL에서 resourceIds 금지. 처리 기한 60초. 상세: references.md. AUTO는 범위 선검증 후 일반 답변 또는 검색 도구 1회·최종 생성으로 분기. 응답 모드는 GENERAL/RESOURCE이며 생성 호출은 최대 2회, 전체 기한은 60초로 유지한다.",
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
@@ -496,7 +496,7 @@
             }
           },
           "409": {
-            "description": "OPERATION_NOT_AVAILABLE (GENERAL/RESOURCE); RESOURCE_NOT_READY / RESOURCE_SCOPE_CHANGED (RESOURCE)",
+            "description": "OPERATION_NOT_AVAILABLE (모든 모드); RESOURCE_NOT_READY / RESOURCE_SCOPE_CHANGED (RESOURCE/AUTO)",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -1377,7 +1377,8 @@
         "required": [
           "historyMessagesUsed",
           "historyTruncated"
-        ]
+        ],
+        "description": "AUTO는 두 모델 호출 중 사용한 고유 이력 메시지 수와 어느 호출에서든 발생한 이력 절단 여부를 반환한다."
       },
       "GeneralAnswerRequest": {
         "type": "object",
@@ -1469,16 +1470,20 @@
           },
           {
             "$ref": "#/components/schemas/ResourceAnswerRequest"
+          },
+          {
+            "$ref": "#/components/schemas/AutoAnswerRequest"
           }
         ],
         "discriminator": {
           "propertyName": "mode",
           "mapping": {
             "GENERAL": "#/components/schemas/GeneralAnswerRequest",
-            "RESOURCE": "#/components/schemas/ResourceAnswerRequest"
+            "RESOURCE": "#/components/schemas/ResourceAnswerRequest",
+            "AUTO": "#/components/schemas/AutoAnswerRequest"
           }
         },
-        "description": "history는 완료된 USER/ASSISTANT 쌍, 현재 질문 제외, 오래된 순. message와 합산 32,000자 이하. 입력 예산 초과 시 오래된 쌍부터 제외. GENERAL에서는 resourceIds 금지."
+        "description": "history는 완료된 USER/ASSISTANT 쌍, 현재 질문 제외, 오래된 순. message와 합산 32,000자 이하. 입력 예산 초과 시 오래된 쌍부터 제외. GENERAL에서는 resourceIds 금지. AUTO에서도 resourceIds는 필수. 기존 모드 의미는 유지하고 AUTO 응답은 GENERAL/RESOURCE로 결정한다."
       },
       "AnswerResponse": {
         "type": "object",
@@ -1594,7 +1599,55 @@
             }
           }
         ],
-        "description": "동기 생성 결과. answerId 조회·저장·멱등성 없음. context는 현재 질문을 제외한 이력 사용 수와 이력 절단 여부. content는 최대 16,000자 Markdown."
+        "description": "동기 생성 결과. answerId 조회·저장·멱등성 없음. context는 현재 질문을 제외한 이력 사용 수와 이력 절단 여부. content는 최대 16,000자 Markdown. AUTO 요청에도 mode는 실제 경로 GENERAL 또는 RESOURCE다."
+      },
+      "AutoAnswerRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000,
+            "pattern": "\\S"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HistoryMessage"
+            },
+            "maxItems": 20,
+            "default": [],
+            "description": "오래된 순의 완료된 USER/ASSISTANT 쌍. 현재 질문 제외. message와 합산 32,000자 이하."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "AUTO"
+            ]
+          },
+          "resourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "필수의 명시적 범위. 빈 배열은 빈 검색 범위이며 전체 검색으로 확장하지 않는다."
+          }
+        },
+        "required": [
+          "userId",
+          "message",
+          "mode",
+          "resourceIds"
+        ],
+        "description": "AI가 검색 도구 사용 여부를 결정. resourceIds는 필수이며 서버가 검증·고정한다. 응답 mode는 실제 경로 GENERAL/RESOURCE."
       }
     },
     "headers": {

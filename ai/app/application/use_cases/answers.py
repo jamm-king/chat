@@ -4,16 +4,16 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from app.application.ports.retrieval import AnswerGenerator, RetrievalOptions
+from app.application.ports.retrieval import AnswerGenerator, AutoAnswerGenerator, RetrievalOptions
 from app.application.rag_dto import (
-    AnswerContext, AnswerRequest, AnswerResponse, Citation, ResourceAnswerRequest, SearchRequest,
+    AnswerContext, AnswerRequest, AnswerResponse, AutoAnswerRequest, Citation, ResourceAnswerRequest, SearchRequest,
 )
 from app.application.use_cases.retrieval import ScopeSnapshot, SearchResources, locator
 from app.domain.errors import RagError
 from app.domain.retrieval import GeneratedAnswer, GenerationInput
+from app.domain.retrieval import INSUFFICIENT_EVIDENCE_TEXT as INSUFFICIENT
 
 REFERENCES = re.compile(r"\[([0-9]+)\]")
-INSUFFICIENT = "선택한 자료에서 질문에 답할 충분한 근거를 찾지 못했습니다."
 
 
 @dataclass(frozen=True)
@@ -37,8 +37,10 @@ def truncate_content(content: str) -> str:
 
 
 class GenerateAnswer:
-    def __init__(self, options: RetrievalOptions, search: SearchResources, generator: AnswerGenerator | None):
+    def __init__(self, options: RetrievalOptions, search: SearchResources, generator: AnswerGenerator | None,
+                 auto_generator: AutoAnswerGenerator | None = None):
         self.options, self.search, self.generator = options, search, generator
+        self.auto_generator = auto_generator
         self.access = search.access
 
     def _response(self, mode, status, content, citations, used=0, truncated=False):
@@ -46,9 +48,9 @@ class GenerateAnswer:
                               context=AnswerContext(historyMessagesUsed=used, historyTruncated=truncated),
                               createdAt=datetime.now(timezone.utc))
 
-    def _plan(self, request, chunks):
+    def _plan(self, request, chunks, extra_bytes=0):
         # A conservative UTF-8 byte budget also bounds token count. Reserve room for instructions/schema.
-        budget = self.options.answer_context_budget_bytes - 4096
+        budget = self.options.answer_context_budget_bytes - 4096 - extra_bytes
         history = [(item.role, item.content) for item in request.history]
 
         def size(evidence, messages):
@@ -106,6 +108,8 @@ class GenerateAnswer:
 
     def execute(self, request: AnswerRequest, check_active=lambda: None) -> AnswerExecution:
         check_active()
+        if isinstance(request, AutoAnswerRequest):
+            return self._execute_auto(request, check_active)
         scope, chunks = None, []
         if isinstance(request, ResourceAnswerRequest):
             if not request.resourceIds:
@@ -125,5 +129,49 @@ class GenerateAnswer:
         status, content, citations = self._validate(request.mode, draft, plan.evidence)
         response = self._response(request.mode, status, content, citations, len(plan.history),
                                   len(plan.history) < len(request.history))
+        self.access.finalize(scope, lambda: None)
+        return AnswerExecution(response, scope)
+
+    def _execute_auto(self, request: AutoAnswerRequest, check_active) -> AnswerExecution:
+        if self.auto_generator is None:
+            raise RagError(409, "OPERATION_NOT_AVAILABLE", "Automatic answer generation is not configured")
+        ids = [str(value) for value in request.resourceIds]
+        scope = self.search.capture_scope(str(request.userId), ids) if ids else None
+        initial_plan = self._plan(request, [])
+        final_plan, searched = initial_plan, False
+
+        def search(query: str, top_k: int, continuation_bytes: int) -> GenerationInput:
+            nonlocal final_plan, searched
+            check_active()
+            if searched or type(top_k) is not int or not 1 <= top_k <= 10:
+                raise invalid_output()
+            if not isinstance(query, str) or not query.strip() or len(query) > 8000:
+                raise invalid_output()
+            if type(continuation_bytes) is not int or continuation_bytes < 0:
+                raise invalid_output()
+            searched = True
+            self.access.finalize(scope, lambda: None)
+            # Check the continuation budget before paying for another provider call.
+            self._plan(request, [], extra_bytes=continuation_bytes)
+            try:
+                result = self.search.execute(SearchRequest(userId=request.userId, query=query,
+                                                           resourceIds=request.resourceIds, topK=top_k), check_active)
+            except RagError as exc:
+                if scope is not None and exc.code in {"RESOURCE_NOT_FOUND", "RESOURCE_NOT_READY"}:
+                    raise RagError(409, "RESOURCE_SCOPE_CHANGED", "Resource scope changed") from None
+                raise
+            self.access.finalize(scope, lambda: None)
+            final_plan = self._plan(request, result.chunks, extra_bytes=continuation_bytes)
+            return GenerationInput("RESOURCE", final_plan.message, final_plan.history, final_plan.evidence)
+
+        check_active()
+        draft = self.auto_generator.generate_auto(initial_plan, search, check_active)
+        check_active()
+        mode = "RESOURCE" if searched else "GENERAL"
+        status, content, citations = self._validate(mode, draft, final_plan.evidence)
+        # AUTO reports unique history messages seen by either call and any pair truncation.
+        used = max(len(initial_plan.history), len(final_plan.history))
+        truncated = min(len(initial_plan.history), len(final_plan.history)) < len(request.history)
+        response = self._response(mode, status, content, citations, used, truncated)
         self.access.finalize(scope, lambda: None)
         return AnswerExecution(response, scope)

@@ -68,6 +68,16 @@ class SearchResources:
                  embeddings: EmbeddingClient | None):
         self.options, self.store, self.access, self.embeddings = options, store, access, embeddings
 
+    def capture_scope(self, user_id: str, resource_ids: list[str]) -> ScopeSnapshot:
+        scope = self.access.capture(user_id, resource_ids)
+        self._check_model(scope)
+        return scope
+
+    def _check_model(self, scope: ScopeSnapshot) -> None:
+        if any(version.model != self.options.embedding_model or version.dimensions != self.options.embedding_dimensions
+               for version in scope.versions.values()):
+            raise RagError(409, "RESOURCE_NOT_READY", "Resource embedding configuration does not match retrieval")
+
     def execute(self, request: SearchRequest, check_active=lambda: None) -> SearchExecution:
         check_active()
         if not request.resourceIds:
@@ -76,9 +86,7 @@ class SearchResources:
         scope = self.access.capture(str(request.userId), ids)
         if self.embeddings is None:
             raise RagError(409, "OPERATION_NOT_AVAILABLE", "Retrieval is not configured")
-        if any(version.model != self.options.embedding_model or version.dimensions != self.options.embedding_dimensions
-               for version in scope.versions.values()):
-            raise RagError(409, "RESOURCE_NOT_READY", "Resource embedding configuration does not match retrieval")
+        self._check_model(scope)
         vector = validate_vectors(self.embeddings.embed_documents([request.query]), 1,
                                   self.options.embedding_dimensions)[0]
         check_active()

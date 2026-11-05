@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
+INSUFFICIENT_EVIDENCE_TEXT = "선택한 자료에서 질문에 답할 충분한 근거를 찾지 못했습니다."
+
 
 @dataclass(frozen=True)
 class IndexVersion:
