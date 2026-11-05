@@ -1,8 +1,8 @@
-# 찾(Chat) 서비스 — 프론트엔드 연동 API 레퍼런스 (MVP v2.3)
+# 찾(Chat) 서비스 — 프론트엔드 연동 API 레퍼런스 (MVP v2.4)
 
 ## 1. 개요
 
-본 문서는 프론트엔드 개발팀이 현재 백엔드 API와 연동하기 위한 MVP v2.3 가이드입니다.
+본 문서는 프론트엔드 개발팀이 현재 백엔드 API와 연동하기 위한 MVP v2.4 가이드입니다.
 
 - **통신 규격**: `application/json`
 - **인증 방식**: JWT Bearer 토큰 (`Authorization: Bearer <access_token>`)
@@ -498,9 +498,24 @@ Error Response:
 
 **`POST /api/v1/messages`**
 
-- **ConversationMode**: `GENERAL` 또는 `RESOURCE`
-- `GENERAL`: 일반 대화
+- **mode** (선택, 기본값 `AUTO`): `GENERAL`, `RESOURCE`, `AUTO`
+- `GENERAL`: 일반 대화. 자료를 검색하지 않음
 - `RESOURCE`: 등록된 자료를 기반으로 하는 RAG 대화
+- `AUTO`: RAG 시스템이 질문을 보고 `GENERAL`과 `RESOURCE` 중 하나를 판단함. `mode`를 생략하면 `AUTO`
+
+`mode`를 적어 보내면 Backend는 그 값을 그대로 RAG 시스템에 전달합니다. 응답과 대화 기록의 `mode`는 판단이 끝난 값(`GENERAL` 또는 `RESOURCE`)이며 `AUTO`는 나오지 않습니다.
+
+| 요청 | 의미 | RAG 시스템에 전달하는 자료 |
+| :--- | :--- | :--- |
+| `GENERAL` | 자료 없이 대화 | 없음 (`resourceIds`를 보내도 무시) |
+| `RESOURCE` + `resourceIds` | 고른 자료를 기준으로 답변 | 고른 자료 |
+| `AUTO` + `resourceIds` | 고른 자료를 참고하되, 자료가 필요한 질문인지는 RAG 시스템이 판단 | 고른 자료 |
+| `AUTO` (자료 선택 없음, 또는 `mode` 생략) | 자료 필요 여부와 범위를 RAG 시스템이 판단 | 사용자의 `READY` 자료 전체 |
+
+- `resourceIds`는 [3.1.2] 자료 목록의 `resourceId`입니다. 사용자가 채팅 화면에서 자료를 골랐을 때 보냅니다.
+- `RESOURCE`와 `AUTO`에서 보낸 `resourceIds`는 같은 규칙으로 검사합니다 (본인 자료인지, `READY`인지). 아래 Error Response 참고.
+
+> **AUTO 모드는 RAG 시스템 쪽 구현이 진행 중입니다 (2026-11-05 기준, 계약 문서 확정 전).** 위 표의 "`AUTO` (자료 선택 없음) → `READY` 자료 전체 전달"과 "응답 `mode`에 판단 결과가 담겨 온다"는 Backend의 가정이며, RAG 시스템 계약(`ai/docs/api/references.md` 3장)이 확정되면 이 문서를 맞춰 고칩니다.
 
 Request Body:
 
@@ -511,6 +526,15 @@ Request Body:
   "resourceIds": [
     "33333333-3333-4333-8333-333333333333"
   ]
+}
+```
+
+`AUTO` 예시 (`mode`를 생략해도 같음):
+
+```json
+{
+  "mode": "AUTO",
+  "message": "지난 회의에서 정한 마감일이 언제야?"
 }
 ```
 
@@ -539,14 +563,15 @@ Response `200 OK`:
 
 > Citation은 프론트엔드에서 AI 답변의 출처를 표시하기 위한 데이터입니다. Backend에 Chunk 테이블이 없어지더라도 프론트엔드는 `resourceId`, `title`, `excerpt`, `locator` 등을 이용하여 출처를 표시할 수 있습니다.
 
-- `resourceIds`: `RESOURCE` 모드에서는 1개 이상 필수이며, `GENERAL` 모드에서는 무시됩니다. 중복된 ID는 한 번만 처리됩니다.
+- `mode`: 판단이 끝난 대화 방식 (`GENERAL` 또는 `RESOURCE`). `AUTO`로 요청했다면 RAG 시스템이 고른 값입니다.
+- `resourceIds`: `RESOURCE` 모드에서는 1개 이상 필수, `AUTO` 모드에서는 선택, `GENERAL` 모드에서는 무시됩니다. 중복된 ID는 한 번만 처리됩니다.
 - `citationId`: 답변 본문의 `[1]`, `[2]` 표시와 매칭되는 번호입니다. 답변마다 1부터 시작합니다.
 - `status`: 답변 결과입니다. 세 값 모두 `200 OK`이며 `content`에 화면에 보여줄 문장이 들어 있습니다.
 
 | status | 의미 | citations |
 | :--- | :--- | :--- |
-| `ANSWERED` | 답변 완료 | `GENERAL`은 없음, `RESOURCE`는 1개 이상 |
-| `INSUFFICIENT_EVIDENCE` | `RESOURCE` 모드에서 선택한 자료에 질문의 근거가 부족함. 일반 지식으로 대신 답하지 않음 | 없음 |
+| `ANSWERED` | 답변 완료 | 응답 `mode`가 `GENERAL`이면 없음, `RESOURCE`면 1개 이상 |
+| `INSUFFICIENT_EVIDENCE` | 응답 `mode`가 `RESOURCE`인데 자료에 질문의 근거가 부족함. 일반 지식으로 대신 답하지 않음 | 없음 |
 | `REFUSED` | 안전 정책에 따라 답변을 거절함 | 없음 |
 
 - `INSUFFICIENT_EVIDENCE`·`REFUSED`도 정상 응답이라 대화 기록에 저장됩니다. 화면에서는 오류가 아닌 안내 문구로 보여주면 됩니다. (대화 기록 조회 응답에는 `status`가 없습니다.)
@@ -559,7 +584,7 @@ Error Response:
 | :--- | :--- | :--- | :--- |
 | `404` | `RESOURCE_NOT_FOUND` | 존재하지 않거나 다른 사용자의 자료 (`details`에 해당 ID 포함) | `false` |
 | `409` | `RESOURCE_NOT_READY` | `READY` 상태가 아닌 자료 포함 (`details`에 해당 ID 포함) | `true` |
-| `422` | `VALIDATION_ERROR` | 잘못된 `mode`, 빈 `message`, `RESOURCE` 모드에서 `resourceIds` 누락 | `false` |
+| `422` | `VALIDATION_ERROR` | `GENERAL`·`RESOURCE`·`AUTO`가 아닌 `mode`, 빈 `message`, `RESOURCE` 모드에서 `resourceIds` 누락 | `false` |
 | `502` | `RAG_SERVICE_UNAVAILABLE` | RAG 시스템 답변 생성 실패 | `true` |
 
 ### 4.1.2 대화 기록 조회 요청
@@ -657,6 +682,7 @@ Request Body:
 - Frontend와 RAG 시스템 사이의 API 연동
 - 노션 연결 요청 중계 (권한 허용 주소 발급, 콜백 전달과 Frontend 화면 이동, 연결 상태 조회)
 - 자료 ID·작업 ID 발급, 노션 페이지 검색 중계, RAG 시스템에 수집 작업 요청과 작업 상태 반영
+- 메시지의 `mode` 전달 (생략 시 `AUTO`), `AUTO`일 때 검색 가능한 자료 범위(`READY` 자료) 전달, 판단된 `mode`로 대화 기록 저장
 
 ### RAG 시스템
 
@@ -668,6 +694,7 @@ Request Body:
 - Vector 데이터 저장
 - Vector Search / 관련 Chunk 검색
 - RAG 답변 생성에 필요한 검색 데이터 관리
+- `AUTO` 모드에서 질문이 일반 대화인지 자료 기반 대화인지 판단
 
 ### Frontend
 
@@ -810,6 +837,12 @@ Frontend
 ---
 
 ## 10. 버전 변경 사항
+
+### v2.4
+
+- 메시지 전송 `mode`에 `AUTO` 추가, `mode`를 생략하면 `AUTO` ([4.1.1])
+- `AUTO`는 RAG 시스템이 `GENERAL`/`RESOURCE`를 판단하고, 응답·대화 기록의 `mode`는 판단된 값으로 반환
+- `AUTO`에서 `resourceIds`는 선택. 없으면 Backend가 사용자의 `READY` 자료 전체를 전달 (RAG 시스템 계약 확정 전 가정)
 
 ### v2.3
 
