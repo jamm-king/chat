@@ -219,7 +219,7 @@ Backend는 사용자가 등록한 자료(Resource)의 기본 정보, 처리 상�
 
 **폴링 규칙:** 자료 `status`가 `PROCESSING`인 동안 `GET /api/v1/resources/{resourceId}`를 2~10초 간격으로 조회하고, `COLLECTED`·`READY`·`FAILED`가 되면 멈춥니다. `COLLECTED`가 된 자료에 대해 `READY`를 기다리며 계속 폴링하지 않습니다.
 
-> 현재 RAG 시스템은 수집(`COLLECT`)까지만 지원합니다. 색인 기능이 구현되기 전까지 등록한 자료는 `COLLECTED`에서 멈추며 `READY`가 되지 않습니다.
+> Backend는 등록할 때 `COLLECT_AND_INDEX`(수집+색인)를 먼저 요청합니다. RAG 시스템의 색인 설정이 꺼져 있으면 `COLLECT`(수집만)로 다시 요청하며, 이때 자료는 `COLLECTED`에서 멈추고 `READY`가 되지 않습니다. 어떤 작업으로 접수됐는지는 `job.operation`으로 확인할 수 있습니다.
 
 ### 3.1.1 자료 등록 요청
 
@@ -840,6 +840,7 @@ Frontend
 
 ### v2.4
 
+- 자료 API 구현 ([3.1]): 등록 시 `COLLECT_AND_INDEX`를 먼저 요청하고, 색인이 꺼져 있으면 `COLLECT`로 요청
 - 메시지 전송 `mode`에 `AUTO` 추가, `mode`를 생략하면 `AUTO` ([4.1.1])
 - `AUTO`는 RAG 시스템이 `GENERAL`/`RESOURCE`를 판단하고, 응답·대화 기록의 `mode`는 판단된 값으로 반환
 - `AUTO`에서 `resourceIds`는 선택. 없으면 Backend가 사용자의 `READY` 자료 전체를 전달 (RAG 시스템 계약 확정 전 가정)
