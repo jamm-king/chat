@@ -1,8 +1,8 @@
-# 찾(Chat) 서비스 — 프론트엔드 연동 API 레퍼런스 (MVP v2.2)
+# 찾(Chat) 서비스 — 프론트엔드 연동 API 레퍼런스 (MVP v2.3)
 
 ## 1. 개요
 
-본 문서는 프론트엔드 개발팀이 현재 백엔드 API와 연동하기 위한 MVP v2.2 가이드입니다.
+본 문서는 프론트엔드 개발팀이 현재 백엔드 API와 연동하기 위한 MVP v2.3 가이드입니다.
 
 - **통신 규격**: `application/json`
 - **인증 방식**: JWT Bearer 토큰 (`Authorization: Bearer <access_token>`)
@@ -541,6 +541,16 @@ Response `200 OK`:
 
 - `resourceIds`: `RESOURCE` 모드에서는 1개 이상 필수이며, `GENERAL` 모드에서는 무시됩니다. 중복된 ID는 한 번만 처리됩니다.
 - `citationId`: 답변 본문의 `[1]`, `[2]` 표시와 매칭되는 번호입니다. 답변마다 1부터 시작합니다.
+- `status`: 답변 결과입니다. 세 값 모두 `200 OK`이며 `content`에 화면에 보여줄 문장이 들어 있습니다.
+
+| status | 의미 | citations |
+| :--- | :--- | :--- |
+| `ANSWERED` | 답변 완료 | `GENERAL`은 없음, `RESOURCE`는 1개 이상 |
+| `INSUFFICIENT_EVIDENCE` | `RESOURCE` 모드에서 선택한 자료에 질문의 근거가 부족함. 일반 지식으로 대신 답하지 않음 | 없음 |
+| `REFUSED` | 안전 정책에 따라 답변을 거절함 | 없음 |
+
+- `INSUFFICIENT_EVIDENCE`·`REFUSED`도 정상 응답이라 대화 기록에 저장됩니다. 화면에서는 오류가 아닌 안내 문구로 보여주면 됩니다. (대화 기록 조회 응답에는 `status`가 없습니다.)
+- 답변 생성은 최대 1분 정도 걸릴 수 있습니다. 요청 중에는 로딩 상태를 보여주고 같은 질문을 중복 전송하지 않게 해주세요.
 - 사용자 메시지와 AI 답변은 답변 생성에 성공한 경우에만 대화 기록에 저장됩니다.
 
 Error Response:
@@ -800,6 +810,11 @@ Frontend
 ---
 
 ## 10. 버전 변경 사항
+
+### v2.3
+
+- 메시지 답변이 임시 답변에서 RAG 시스템의 실제 답변으로 바뀜 (`POST /internal/v1/answers` 연동)
+- 메시지 전송 응답 `status`에 `INSUFFICIENT_EVIDENCE`, `REFUSED` 추가 ([4.1.1])
 
 ### v2.2
 
