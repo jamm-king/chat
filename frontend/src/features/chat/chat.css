@@ -104,13 +104,12 @@
   cursor: wait;
 }
 
-/* 말풍선만 다른 상자보다 부드럽게 둥글리고, 꼬리가 붙는 아래 모서리만 각지게 둔다 */
 .bubble {
   position: relative;
   max-width: 70%;
   margin: 0;
   padding: 12px 16px;
-  border-radius: 14px;
+  border-radius: 6px;
   line-height: 1.5;
   white-space: pre-wrap;
 }
