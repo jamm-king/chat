@@ -162,3 +162,25 @@
   height: 11px;
   background: var(--card);
 }
+
+.chat-notion-done {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 14px;
+  word-break: keep-all;
+}
+
+.chat-notion-done::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+  vertical-align: middle;
+}
