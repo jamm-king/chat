@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Response, status
@@ -26,6 +27,7 @@ router = APIRouter(
     tags=["Messages"]
 )
 
+logger = logging.getLogger(__name__)
 
 # RAG 호출 시 함께 전달할 이전 대화 개수
 HISTORY_LIMIT = 20
@@ -126,12 +128,15 @@ def send_message(
     # AI 답변 생성
     try:
         answer = rag.generate_answer(
+            user_id=current_user.id,
             mode=body.mode,
             message=body.message,
             resources=resources,
             history=history,
         )
-    except rag.RagServiceError:
+    except rag.RagServiceError as exc:
+        # 원인은 서버 로그에만 남기고, 프론트에는 명세의 공통 에러 형식으로 보낸다
+        logger.warning("RAG answer failed: %s", exc)
         raise AppError(
             status.HTTP_502_BAD_GATEWAY,
             "RAG_SERVICE_UNAVAILABLE",
@@ -184,6 +189,7 @@ def send_message(
     return MessageAnswerResponse(
         answer_id=assistant_message.id,
         mode=body.mode,
+        status=answer.status,
         content=assistant_message.content,
         citations=[
             CitationResponse(
