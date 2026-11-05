@@ -2,13 +2,15 @@
 :root {
     --bg: #f6f4fb;/*바탕색*/
     --text: #1d1530;
-    --muted: #8a7fa3;
-    --accent: #9147d1; /*찾 프로젝트 메인 컬러: 낮에는 채도를 낮춘 보라, 밤에는 네온 퍼플*/
-    --accent-soft: #f0e9f7;
-    --line: #eee8f7;
+    --muted: hsl(258, 25%, 52%);
+    --accent: hsl(258, 99%, 27%); /*찾 프로젝트 메인 컬러: 낮에는 짙은 남보라, 밤에는 네온 퍼플*/
+    --accent-soft: hsl(258, 70%, 95%);
+    --line: hsl(258, 50%, 93%);
     --card: rgba(255, 255, 255, 0.72);
     --on-accent: #ffffff;
     --danger: #c62828;
+    --disabled-bg: hsl(240, 34%, 54%);
+    --disabled-text: hsl(260, 19%, 85%);
 }
 :root[data-theme="dark"]{
     --bg: #09060f;
@@ -20,6 +22,9 @@
     --card: rgba(14,8 ,26, 0.82);
     --on-accent: #12051f;
     --danger: #ff8a80;
+    --disabled-bg: rgba(196, 92, 255, 0.12);
+    --disabled-text: #8f7fb3;
+    --neon-glow: 0 0 15px rgba(196, 92, 255, 0.6), 0 0 12px rgba(196, 92, 255, 0.35);
 }
 
 /* 고운돋움은 굵기가 한 가지뿐이라, 브라우저가 억지로 굵게 만들지 않도록 막는다 */
@@ -64,5 +69,18 @@ h1 {
 
 /* 야간 모드에서는 단추 둘레에 네온 빛이 살짝 번지게 한다 */
 :root[data-theme="dark"] button:not(:disabled) {
-  box-shadow: 0 0 2px rgba(196, 92, 255, 0.6), 0 0 12px rgba(196, 92, 255, 0.35);
+  box-shadow: var(--neon-glow);
+}
+
+/* 상자 테두리에도 단추와 같은 번짐을 준다 */
+:root[data-theme="dark"] .auth-card,
+:root[data-theme="dark"] .chat-side,
+:root[data-theme="dark"] .chat-main,
+:root[data-theme="dark"] input {
+  box-shadow: var(--neon-glow);
+}
+
+/* 말풍선은 꼬리(::before, ::after)까지 같이 빛나도록 box-shadow 대신 filter 를 쓴다 */
+:root[data-theme="dark"] .bubble {
+  filter: drop-shadow(0 0 8px rgba(196, 92, 255, 0.55));
 }

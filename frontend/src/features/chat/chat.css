@@ -69,7 +69,8 @@
 }
 
 .chat-input button:disabled {
-  opacity: 0.45;
+  background: var(--disabled-bg);
+  color: var(--disabled-text);
   cursor: not-allowed;
 }
 .chat-logout {
