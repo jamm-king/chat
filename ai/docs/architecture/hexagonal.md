@@ -33,7 +33,8 @@ domain은 application·adapters에 의존하지 않는다. application은 domain
 | TextChunker | LangChainTextChunker | 텍스트 경계·오프셋을 보존한 분할 |
 | EmbeddingClient | OpenAIEmbeddingClient | LangChain OpenAI 임베딩 호출 |
 | RetrievalStore | SqlAlchemyRetrievalStore | 사용자·자료·모델 범위 검증과 벡터 검색 |
-| AnswerGenerator | LangChainAnswerGenerator | Responses API 구조화 답변 생성 |
+| AnswerGenerator | LangChainAnswerGenerator | 기존 GENERAL·RESOURCE 구조화 답변 생성 |
+| AutoAnswerGenerator | LangChainAnswerGenerator | AUTO의 도구 호출 또는 직접 답변, 검색 후 최종 생성 |
 | JobExecutor | AsyncioJobExecutor | 작업 예약·종료·스레드 호출·호출 기한 |
 
 IngestionManager는 접수·작업 상태·기한·삭제 제외를 조율하고 DocumentIndexer는 본문 완전성·빈 텍스트·배치·벡터 검증을 담당한다. 메모리 작업 저장과 공개 잠금은 기존 단일 프로세스 구현을 유지한다. 이 리팩토링으로 영속 큐나 재시작 복구를 추가하지 않는다.
@@ -44,7 +45,7 @@ IngestionManager는 접수·작업 상태·기한·삭제 제외를 조율하고
 
 삭제와 스냅샷·색인 공개는 같은 유스케이스 잠금을 사용한다. 외부 호출을 기다리는 동안 잠금을 잡지 않으며, 늦게 끝난 호출은 삭제·기한을 다시 확인한 뒤 저장을 중단한다. 기존 동기 등록은 inbound/http/registration.py의 호환 경로에서 동일한 잠금을 사용한다. 삭제 실패 시 메모리 제외 표시는 유지한다.
 
-OAuth 쿠키·콜백 처리와 페이지 검색·미리보기는 기존 HTTP 어댑터에서 유지하고, 토큰 교환·암호화와 Notion 호출은 outbound/notion에 둔다. deprecated 동기 등록도 HTTP 호환 경로로 유지한다. 검색·답변 유스케이스는 application/use_cases/retrieval.py·answers.py와 RetrievalStore·AnswerGenerator 포트를 사용한다. PostgreSQL 검색과 LangChain ChatOpenAI는 외부 어댑터가 구현한다. [실행 안내](retrieval-and-answers.md)를 따른다.
+OAuth 쿠키·콜백 처리와 페이지 검색·미리보기는 기존 HTTP 어댑터에서 유지하고, 토큰 교환·암호화와 Notion 호출은 outbound/notion에 둔다. deprecated 동기 등록도 HTTP 호환 경로로 유지한다. 검색·답변 유스케이스는 application/use_cases/retrieval.py·answers.py와 RetrievalStore·AnswerGenerator 포트를 사용한다. PostgreSQL 검색과 LangChain ChatOpenAI는 외부 어댑터가 구현한다. AUTO는 서버가 주입한 검색 콜백만 호출하며 코어는 LangChain 도구·메시지 자료형에 의존하지 않는다. [실행 안내](retrieval-and-answers.md)를 따른다.
 
 ## 검증
 

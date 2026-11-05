@@ -1,6 +1,6 @@
 # Backend–AI 연동 구조와 확정 계약
 
-2026-11-04 · COLLECT 접수·조회와 자료 삭제·작업 취소 구현. COLLECT_AND_INDEX 색인과 RAG 검색·답변도 구현됐다. 각각 설정 활성화가 필요하다.
+2026-11-05 · COLLECT 접수·조회와 자료 삭제·작업 취소 구현. COLLECT_AND_INDEX 색인과 RAG 검색·답변도 구현됐다. 각각 설정 활성화가 필요하다.
 
 ## 문서 적용 범위
 
@@ -29,7 +29,7 @@ Frontend는 Backend만 호출한다. `AI_SERVICE_TOKEN`과 Notion 토큰은 Fron
 | 수집·저장 | 공통 자료 ID로 COLLECT 비동기 접수·저장, HTTP 202 | 구현됨. 기존 HTTP 201 동기 경로는 deprecated |
 | 작업 API | COLLECT·COLLECT_AND_INDEX 메모리 작업 조회·종료 결과 제공 | 재시작 복구 제외 |
 | 청킹·임베딩·벡터 저장 | COLLECT_AND_INDEX 구현 (설정 시 활성화) | 색인 커밋 후에만 READY |
-| RAG 검색·답변 | 검색·일반/자료 기반 답변 구현 (RAG_ENABLED) | 범위·삭제 재검증, 실제 모델 품질 평가 필요 |
+| RAG 검색·답변 | GENERAL·RESOURCE 및 AUTO 도구 선택 답변 (RAG_ENABLED) | 범위·삭제 재검증, 실제 모델 품질 평가 필요 |
 | AI 자료 삭제 | 원본·본문·참조·청크·벡터·색인 완료 레코드 삭제 구현 | 수집·색인 중 삭제 시 늦은 결과 공개 방지 |
 
 현재 AI의 `content_status: complete`는 현재 페이지 본문의 API 응답 기준 완전성을 뜻한다. 검색 가능한 상태나 참조 자료 수집 완료를 뜻하지 않는다. `status: connected`도 저장된 연결 표시이며 현재 토큰 유효성을 검사한 결과가 아니다.
@@ -103,6 +103,8 @@ EXTRACTED는 수집 단계를 통과했다는 진행 상태이고 작업의 종�
 기존 COLLECTED 자료에 같은 원본 식별자로 새 COLLECT_AND_INDEX 작업을 요청하면 보존한 본문 스냅샷을 사용해 `QUEUED → EXTRACTING → EXTRACTED → INDEXING → SUCCEEDED`로 진행한다. EXTRACTING에서 저장된 스냅샷을 읽으며 Notion 원문을 자동 재수집하지 않는다. 이 승격은 색인 설정 활성화 시 지원한다. 자료의 원본 식별자 변경은 새 resourceId로 등록한다.
 
 AI가 작업 실행 상태의 기준이다. Backend는 jobId에 맞는 결과를 저장·전달하고 이미 삭제한 자료를 늦은 성공 응답으로 되살리지 않는다. 오류는 AI 작업 결과의 `code`, `message`, `retryable`을 Backend 작업 레코드에 보관한다. 자료 상세 응답의 error는 최근 작업 오류에서 만든다.
+
+자동 검색 판단을 사용하려면 Backend는 /internal/v1/answers에 mode=AUTO와 명시적인 resourceIds를 보낸다. 기존 GENERAL·RESOURCE의 의미는 유지한다. AUTO의 응답 mode는 검색 도구 호출 여부에 따라 GENERAL 또는 RESOURCE이며 Backend가 질문을 의미 분류하지 않는다. 자료 범위의 소유권·READY 검증은 계속 Backend와 AI가 담당한다.
 
 ## 5. 참조와 사용자 선택 등록
 
