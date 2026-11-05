@@ -35,7 +35,7 @@
   display: grid;
   gap: 6px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 200;
 }
 
 .auth-card input {
@@ -59,7 +59,7 @@
   background: var(--accent);
   color: var(--on-accent);
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 200;
   cursor: pointer;
 }
 

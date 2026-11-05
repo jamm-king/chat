@@ -25,21 +25,27 @@
     --disabled-bg: rgba(196, 92, 255, 0.12);
     --disabled-text: #8f7fb3;
     --neon-glow: 0 0 15px rgba(196, 92, 255, 0.6), 0 0 12px rgba(196, 92, 255, 0.35);
+    --neon-glow-soft: 0 0 15px rgba(196, 92, 255, 0.3), 0 0 12px rgba(196, 92, 255, 0.175);
 }
 
-/* 고운돋움은 굵기가 한 가지뿐이라, 브라우저가 억지로 굵게 만들지 않도록 막는다 */
+/* 모든 글자를 Pretendard 가장 얇은 단계(ExtraLight 200)로 맞춘다 */
 body{
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: "Gowun Dodum", "Malgun Gothic", sans-serif;
-    font-synthesis: none;
+    font-family: Pretendard, "Malgun Gothic", sans-serif;
+    font-weight: 200;
 }
 
-/* 단추와 입력 칸은 브라우저가 글꼴을 따로 정해서, 바깥 글꼴을 따르게 한다 */
+h1 {
+    font-weight: inherit;
+}
+
+/* 단추와 입력 칸은 브라우저가 글꼴과 굵기를 따로 정해서, 바깥 것을 따르게 한다 */
 button,
 input {
     font-family: inherit;
+    font-weight: inherit;
 }
 
 h1 {
@@ -72,15 +78,15 @@ h1 {
   box-shadow: var(--neon-glow);
 }
 
-/* 상자 테두리에도 단추와 같은 번짐을 준다 */
+/* 상자 테두리는 단추의 절반 세기로 번지게 한다 */
 :root[data-theme="dark"] .auth-card,
 :root[data-theme="dark"] .chat-side,
 :root[data-theme="dark"] .chat-main,
 :root[data-theme="dark"] input {
-  box-shadow: var(--neon-glow);
+  box-shadow: var(--neon-glow-soft);
 }
 
 /* 말풍선은 꼬리(::before, ::after)까지 같이 빛나도록 box-shadow 대신 filter 를 쓴다 */
 :root[data-theme="dark"] .bubble {
-  filter: drop-shadow(0 0 8px rgba(196, 92, 255, 0.55));
+  filter: drop-shadow(0 0 8px rgba(196, 92, 255, 0.28));
 }
