@@ -48,7 +48,7 @@ class CitationResponse(CamelModel):
 class MessageAnswerResponse(CamelModel):
     answer_id: str
     mode: ConversationMode
-    status: Literal["ANSWERED"] = "ANSWERED"
+    status: Literal["ANSWERED", "INSUFFICIENT_EVIDENCE", "REFUSED"] = "ANSWERED"
     content: str
     citations: List[CitationResponse]
 
