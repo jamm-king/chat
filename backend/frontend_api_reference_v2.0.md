@@ -515,7 +515,10 @@ Error Response:
 - `resourceIds`는 [3.1.2] 자료 목록의 `resourceId`입니다. 사용자가 채팅 화면에서 자료를 골랐을 때 보냅니다.
 - `RESOURCE`와 `AUTO`에서 보낸 `resourceIds`는 같은 규칙으로 검사합니다 (본인 자료인지, `READY`인지). 아래 Error Response 참고.
 
-> **AUTO 모드는 RAG 시스템 쪽 구현이 진행 중입니다 (2026-11-05 기준, 계약 문서 확정 전).** 위 표의 "`AUTO` (자료 선택 없음) → `READY` 자료 전체 전달"과 "응답 `mode`에 판단 결과가 담겨 온다"는 Backend의 가정이며, RAG 시스템 계약(`ai/docs/api/references.md` 3장)이 확정되면 이 문서를 맞춰 고칩니다.
+> **AUTO 모드는 아직 사용할 수 없습니다 (2026-11-05 기준, 구현 예정).**
+> - **Backend도 아직 `AUTO`를 받지 않습니다.** 지금은 `mode`가 필수이며 `GENERAL` 또는 `RESOURCE`만 받습니다. `mode`를 빼거나 `AUTO`를 보내면 `422 VALIDATION_ERROR`가 납니다. 구현 전까지는 `mode`를 `GENERAL` 또는 `RESOURCE`로 적어 보내 주세요.
+> - RAG 시스템 쪽 구현도 진행 중이며 계약 문서가 확정되지 않았습니다. 위 표의 "`AUTO` (자료 선택 없음) → `READY` 자료 전체 전달"과 "응답 `mode`에 판단 결과가 담겨 온다"는 Backend의 가정이며, RAG 시스템 계약(`ai/docs/api/references.md` 3장)이 확정되면 이 문서를 맞춰 고칩니다.
+> - 구현이 끝나면 이 안내를 지우고 버전 변경 사항에 적습니다.
 
 Request Body:
 
@@ -841,7 +844,7 @@ Frontend
 ### v2.4
 
 - 자료 API 구현 ([3.1]): 등록 시 `COLLECT_AND_INDEX`를 먼저 요청하고, 색인이 꺼져 있으면 `COLLECT`로 요청
-- 메시지 전송 `mode`에 `AUTO` 추가, `mode`를 생략하면 `AUTO` ([4.1.1])
+- 메시지 전송 `mode`에 `AUTO` 추가, `mode`를 생략하면 `AUTO` ([4.1.1]) — **설계만 반영, Backend·RAG 시스템 모두 구현 예정**
 - `AUTO`는 RAG 시스템이 `GENERAL`/`RESOURCE`를 판단하고, 응답·대화 기록의 `mode`는 판단된 값으로 반환
 - `AUTO`에서 `resourceIds`는 선택. 없으면 Backend가 사용자의 `READY` 자료 전체를 전달 (RAG 시스템 계약 확정 전 가정)
 
