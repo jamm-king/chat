@@ -10,7 +10,7 @@
 .chat-side,
 .chat-main {
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: 3px;
   background: var(--card);
 }
 
@@ -30,7 +30,7 @@
   padding: 20px 24px;
   border-bottom: 1px solid var(--line);
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 200;
 }
 
 .chat-list {
@@ -52,7 +52,7 @@
 .chat-input input {
   padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 3px;
   background: transparent;
   color: var(--text);
   font-size: 15px;
@@ -61,23 +61,126 @@
 .chat-input button {
   padding: 0 20px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 3px;
   background: var(--accent);
   color: var(--on-accent);
-  font-weight: 700;
+  font-weight: 200;
   cursor: pointer;
 }
 
 .chat-input button:disabled {
-  opacity: 0.45;
+  background: var(--disabled-bg);
+  color: var(--disabled-text);
   cursor: not-allowed;
 }
 .chat-logout {
   justify-self: start;
   padding: 8px 14px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 3px;
   background: transparent;
   color: var(--text);
   cursor: pointer;
+}
+
+.chat-notion {
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 200;
+  cursor: pointer;
+}
+
+.chat-error {
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 14px;
+}
+.chat-notion:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.bubble {
+  position: relative;
+  max-width: 70%;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 6px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.bubble-user {
+  justify-self: end;
+  border-bottom-right-radius: 3px;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* 내 말풍선 꼬리: 오른쪽 아래에서 바깥으로 뾰족하게 나온 삼각형 */
+.bubble-user::after {
+  content: "";
+  position: absolute;
+  right: -7px;
+  bottom: 0;
+  width: 10px;
+  height: 12px;
+  background: var(--accent);
+  clip-path: polygon(0 0, 0 100%, 100% 100%);
+}
+
+.bubble-assistant {
+  justify-self: start;
+  border: 1px solid var(--line);
+  border-bottom-left-radius: 3px;
+  background: var(--card);
+}
+
+.bubble-assistant::before,
+.bubble-assistant::after {
+  content: "";
+  position: absolute;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+
+.bubble-assistant::before {
+  left: -9px;
+  bottom: -1px;
+  width: 9px;
+  height: 13px;
+  background: var(--line);
+}
+
+.bubble-assistant::after {
+  left: -7px;
+  bottom: 0;
+  width: 8px;
+  height: 11px;
+  background: var(--card);
+}
+
+.chat-notion-done {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 14px;
+  word-break: keep-all;
+}
+
+.chat-notion-done::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+  vertical-align: middle;
 }
