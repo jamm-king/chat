@@ -9,11 +9,11 @@ Notion OAuth 연결, 페이지 수집·저장, 청킹·색인, 자료 검색·�
 | [Backend–AI 연동 구조와 결정](docs/architecture/backend-ai-contract.md) | 역할·공통 ID·자료/작업 상태·참조·삭제 기준 |
 | [현행 Notion OAuth 계약](docs/api/notion-oauth.md) | 구현된 OAuth API와 Backend 쿠키 중계 |
 | [API 계약](docs/api/references.md) | 비동기 수집·색인·검색·삭제 요청/응답 |
-| [정적 OpenAPI](docs/api/openapi.json) | API v2.0.0, 수집·색인·삭제·RAG 검색·답변 계약 |
+| [정적 OpenAPI](docs/api/openapi.json) | API v2.1.0, 수집·색인·삭제·RAG 검색·답변 계약 |
 | [로더 설계](docs/architecture/loader-architecture.md) | 현재 공식 API 로더와 참조 처리 |
 | [검증 계획](docs/mvp-validation.md) | 자동 검증 범위와 실제 통합·품질 확인 항목 |
 
-현재 실행 진입점은 `app.main:app`이다. `/docs`·`/openapi.json`은 구현된 경로와 자료형을 보여준다. 수동 오류 응답·헤더·상태 전이와 자동 생성 422 표기의 해석은 [API 계약](docs/api/references.md#공통-규칙)을 함께 따른다. OAuth·Notion 페이지 검색·미리보기와 COLLECT 비동기 접수·조회가 구현돼 있다. 기존 동기 자료 등록은 호환용 deprecated API다. 사용자별 자료 삭제·진행 작업 취소도 구현돼 있다. 청킹·OpenAI 임베딩·pgvector 저장과 COLLECT_AND_INDEX도 구현돼 있다. 일반/자료 기반 답변과 사용자 범위의 RAG 검색도 구현돼 있다. 설정·수동 확인은 [검색·답변 안내](docs/architecture/retrieval-and-answers.md)를 따른다.
+현재 실행 진입점은 `app.main:app`이다. `/docs`·`/openapi.json`은 구현된 경로와 자료형을 보여준다. 수동 오류 응답·헤더·상태 전이와 자동 생성 422 표기의 해석은 [API 계약](docs/api/references.md#공통-규칙)을 함께 따른다. OAuth·Notion 페이지 검색·미리보기와 COLLECT 비동기 접수·조회가 구현돼 있다. 기존 동기 자료 등록은 호환용 deprecated API다. 사용자별 자료 삭제·진행 작업 취소도 구현돼 있다. 청킹·OpenAI 임베딩·pgvector 저장과 COLLECT_AND_INDEX도 구현돼 있다. 일반/자료 기반 답변과 사용자 범위의 RAG 검색도 구현돼 있다. AUTO 요청은 검색 도구 사용 여부를 AI가 결정하고 실제 경로에 따라 GENERAL 또는 RESOURCE로 응답한다. 설정·수동 확인은 [검색·답변 안내](docs/architecture/retrieval-and-answers.md)를 따른다.
 
 설정·실행은 [OAuth 문서](docs/api/notion-oauth.md#local-setup-and-verification)를 따른다. 기본 개발 DB는 Compose의 PostgreSQL 17 + pgvector다. 기존 볼륨의 확장 활성화 절차는 [색인 안내](docs/architecture/indexing.md#postgresql-준비)를 따른다.
 
