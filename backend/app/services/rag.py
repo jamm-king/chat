@@ -24,6 +24,13 @@ HISTORY_CONTENT_LIMIT = 8000
 class RagServiceError(Exception):
     pass
 
+# AI 가 자료 범위 문제로 답변을 거절한 경우 (404/409). 라우터가 같은 코드로 프론트에 전달한다
+RESOURCE_ERROR_CODES = {"RESOURCE_NOT_FOUND", "RESOURCE_NOT_READY", "RESOURCE_SCOPE_CHANGED"}
+
+class RagResourceError(Exception):
+    def __init__(self, code:str):
+        super().__init__(code)
+        self.code = code
 
 @dataclass
 class HistoryTurn:
@@ -82,7 +89,10 @@ def generate_answer(
     except ai_client.AiServiceUnavailable as exc:
         raise RagServiceError("AI 서비스에 연결하지 못했습니다.") from exc
     if response.status_code !=200:
-        raise RagServiceError(f"AI 답변 생성 실패: HTTP {response.status_code} {_error_code(response)}")
+        code = _error_code(response)
+        if response.status_code in (404, 409) and code in RESOURCE_ERROR_CODES:
+            raise RagResourceError(code)
+        raise RagServiceError(f"AI 답변 생성 실패: HTTP {response.status_code} {code}")
     
     data= response.json()
     answered_mode = data.get("mode")
