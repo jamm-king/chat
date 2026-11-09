@@ -5,7 +5,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
 
-ConversationMode = Literal["GENERAL", "RESOURCE"]
+ConversationMode = Literal["GENERAL","RESOURCE"]
+RequestMode = Literal["GENERAL","RESOURCE","AUTO"]
 
 
 # API 명세가 camelCase 이므로 alias 를 camelCase 로 지정
@@ -18,9 +19,9 @@ class CamelModel(BaseModel):
 
 # 메시지 전송 요청
 class MessageCreate(CamelModel):
-    mode: ConversationMode
+    mode: RequestMode = "AUTO"
     message: str = Field(min_length=1, max_length=4000)
-    resource_ids: List[str] = Field(default_factory=list)
+    resource_ids: List[str] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
     def check_resource_ids(self):
