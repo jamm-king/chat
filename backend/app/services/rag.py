@@ -5,7 +5,8 @@ RAG 답변 생성. AI 서비스의 POST /internal/v1/answers 를 호출한다.
 - GENERAL 은 자료 검색 없이 답한다. resourceIds 를 보내면 AI 가 400 을 준다.
 - RESOURCE 는 넘긴 자료에서만 검색해 답하고 출처(citations)를 준다.
 - status: ANSWERED(답변), INSUFFICIENT_EVIDENCE(자료에 근거 부족), REFUSED(거절). 셋 다 HTTP 200 이다.
-라우터는 이 함수의 입력/출력 형식에만 의존한다.
+- AUTO 는 AI 가 검색 여부를 정한다. resourceIds 는 필수(빈 배열 허용)이고, 응답 mode 로 실제 방식(GENERAL/RESOURCE)을 알려준다.
+- 라우터는 이 함수의 입력/출력 형식에만 의존한다.
 """
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -35,11 +36,13 @@ class RagCitation:
     resource_id: str
     excerpt: str
     locator: Optional[Dict[str, Any]] = None
+    chunk_id: Optional[str] = None
 
 
 @dataclass
 class RagAnswer:
     content: str
+    mode: str
     status: str = "ANSWERED"
     citations: List[RagCitation] = field(default_factory=list)
 
@@ -55,9 +58,9 @@ def generate_answer(
     사용자 메시지에 대한 AI 답변을 생성한다.
 
     user_id   : 로그인 사용자 ID (AI 가 자료 범위를 다시 확인하는 기준)
-    mode      : GENERAL 또는 RESOURCE
+    mode      : GENERAL, RESOURCE 또는 AUTO
     message   : 사용자 메시지
-    resources : RESOURCE 모드에서 검색 대상 자료 (GENERAL 모드에서는 빈 리스트)
+    resources : RESOURCE/AUTO 모드에서 검색 대상 자료 (GENERAL 모드에서는 빈 리스트)
     history   : 이전 대화 기록 (오래된 순)
     """
     payload: Dict[str, Any] = {
@@ -66,7 +69,7 @@ def generate_answer(
         "message": message,
         "history": _history_payload(history),
     }
-    if mode == "RESOURCE":
+    if mode in ("RESOURCE", "AUTO"):
         payload["resourceIds"] = [resource.id for resource in resources]
 
     try:
@@ -82,15 +85,20 @@ def generate_answer(
         raise RagServiceError(f"AI 답변 생성 실패: HTTP {response.status_code} {_error_code(response)}")
     
     data= response.json()
+    answered_mode = data.get("mode")
+    if answered_mode not in ("GENERAL", "RESOURCE"):
+        raise RagServiceError(f"AI 응답의 mode가 올바르지 않습니다: {answered_mode}")
 
     return RagAnswer(
         content=data["content"],
+        mode=answered_mode,
         status=data["status"],
         citations=[
             RagCitation(
                 resource_id=c["resourceId"],
                 excerpt=c["excerpt"],
                 locator=c.get("locator"),
+                chunk_id=c.get("chunkId")
             )
             for c in data.get("citations",[])
         ],
