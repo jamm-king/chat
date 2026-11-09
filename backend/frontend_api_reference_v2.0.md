@@ -1,8 +1,8 @@
-# 찾(Chat) 서비스 — 프론트엔드 연동 API 레퍼런스 (MVP v2.5)
+# 찾(Chat) 서비스 — 프론트엔드 연동 API 레퍼런스 (MVP v2.6)
 
 ## 1. 개요
 
-본 문서는 프론트엔드 개발팀이 현재 백엔드 API와 연동하기 위한 MVP v2.5 가이드입니다.
+본 문서는 프론트엔드 개발팀이 현재 백엔드 API와 연동하기 위한 MVP v2.6 가이드입니다.
 
 - **통신 규격**: `application/json`
 - **인증 방식**: JWT Bearer 토큰 (`Authorization: Bearer <access_token>`)
@@ -584,10 +584,15 @@ Error Response:
 
 | Status | Code | 설명 | retryable |
 | :--- | :--- | :--- | :--- |
-| `404` | `RESOURCE_NOT_FOUND` | 존재하지 않거나 다른 사용자의 자료 (`details`에 해당 ID 포함) | `false` |
-| `409` | `RESOURCE_NOT_READY` | `READY` 상태가 아닌 자료 포함 (`details`에 해당 ID 포함) | `true` |
+| `404` | `RESOURCE_NOT_FOUND` | 존재하지 않거나 다른 사용자의 자료 (`details`에 해당 ID 포함. 답변 생성 중 RAG 시스템이 알린 경우 `details` 없음) | `false` |
+| `409` | `RESOURCE_NOT_READY` | `READY` 상태가 아닌 자료 포함 (`details`에 해당 ID 포함. 답변 생성 중 RAG 시스템이 알린 경우 `details` 없음) | `true` |
+| `409` | `RESOURCE_SCOPE_CHANGED` | 답변을 만드는 동안 자료가 삭제되거나 바뀜. 메시지는 저장되지 않음. 자료 목록을 새로 받은 뒤 다시 보내야 함 | `false` |
+| `409` | `ANSWER_IN_PROGRESS` | 이전 메시지의 답변을 아직 만드는 중 (사용자별로 한 번에 하나만 생성). 답변이 끝난 뒤 다시 보내면 됨 | `true` |
+| `409` | `CONVERSATION_CLEARED` | 답변을 만드는 동안 대화 기록이 초기화됨([4.1.3]). 이 답변은 저장되지 않으므로 화면에서 버리면 됨 | `false` |
 | `422` | `VALIDATION_ERROR` | `GENERAL`·`RESOURCE`·`AUTO`가 아닌 `mode`, 빈 `message`, `RESOURCE` 모드에서 `resourceIds` 누락, `resourceIds` 100개 초과 | `false` |
 | `502` | `RAG_SERVICE_UNAVAILABLE` | RAG 시스템 답변 생성 실패 | `true` |
+
+- 오류가 나면 사용자 메시지와 답변 모두 저장되지 않습니다. 대화 기록에는 답변까지 성공한 질문만 남습니다.
 
 ### 4.1.2 대화 기록 조회 요청
 
@@ -640,6 +645,8 @@ Response `200 OK`:
 **`DELETE /api/v1/messages`**
 
 현재 사용자의 모든 메시지와 출처(Citation) 기록을 삭제합니다.
+
+- 답변을 만드는 중에 초기화하면, 그 답변은 저장되지 않고 메시지 전송 요청이 `409 CONVERSATION_CLEARED`로 끝납니다. 초기화 직후 새 메시지는 바로 보낼 수 있습니다.
 
 Response `204 No Content` (응답 본문 없음)
 
@@ -839,6 +846,13 @@ Frontend
 ---
 
 ## 10. 버전 변경 사항
+
+### v2.6
+
+- 메시지 전송 에러 추가 ([4.1.1]): `409 RESOURCE_SCOPE_CHANGED`, `409 ANSWER_IN_PROGRESS`, `409 CONVERSATION_CLEARED`
+- 답변 생성 중 RAG 시스템이 자료 문제를 알리면 `502` 대신 `404 RESOURCE_NOT_FOUND` / `409 RESOURCE_NOT_READY` / `409 RESOURCE_SCOPE_CHANGED`로 전달
+- 답변을 저장하기 직전에 출처 자료가 아직 `READY`인지 다시 확인
+- 사용자별로 한 번에 하나의 답변만 생성, 생성 중 대화를 초기화하면 늦은 답변은 저장하지 않음 ([4.1.3])
 
 ### v2.5
 
