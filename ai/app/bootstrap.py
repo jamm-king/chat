@@ -10,7 +10,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.config import Settings
 from app.application.ports.documents import EmbeddingClient
-from app.application.ports.retrieval import AnswerGenerator
+from app.application.ports.retrieval import AnswerGenerator, AutoAnswerGenerator
 from app.application.use_cases.indexing import DocumentIndexer
 from app.application.use_cases.ingestion import IngestionManager
 from app.application.use_cases.retrieval import ResourceAccess, SearchResources
@@ -30,7 +30,8 @@ from app.adapters.inbound.http.api import create_http_app
 def create_app(settings: Settings | None = None, *, engine: Engine | None = None,
                notion_client: httpx.Client | None = None,
                embedding_client: EmbeddingClient | None = None,
-               answer_generator: AnswerGenerator | None = None) -> FastAPI:
+               answer_generator: AnswerGenerator | None = None,
+               auto_answer_generator: AutoAnswerGenerator | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         config = settings or Settings()
@@ -74,7 +75,10 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
                 answer_http = httpx.Client(timeout=config.answer_provider_timeout_seconds,
                                           transport=httpx.HTTPTransport(retries=0), follow_redirects=False)
                 generator = LangChainAnswerGenerator(config, answer_http)
-            app.state.answers = GenerateAnswer(config, app.state.retrieval, generator)
+            auto_generator = auto_answer_generator
+            if auto_generator is None and isinstance(generator, LangChainAnswerGenerator):
+                auto_generator = generator
+            app.state.answers = GenerateAnswer(config, app.state.retrieval, generator, auto_generator)
             store.vector_storage_available = await run_in_threadpool(init_db, db_engine,
                                                                       indexer is not None or config.rag_enabled)
             yield
