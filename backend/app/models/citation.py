@@ -10,6 +10,7 @@ class Citation(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     message_id: Mapped[str] = mapped_column(String(36), ForeignKey("messages.id", ondelete="CASCADE"), nullable=False)
     resource_id: Mapped[str] = mapped_column(String(36), ForeignKey("resources.id", ondelete="CASCADE"), nullable=False)
+    chunk_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)  # AI 가 준 청크 ID (출처 스냅샷)
     excerpt: Mapped[str] = mapped_column(Text, nullable=False)
     locator: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     # 답변 본문의 [1], [2] 표시와 매칭되는 순서 (1부터 시작)
