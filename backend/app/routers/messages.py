@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Response, status
@@ -26,9 +27,13 @@ router = APIRouter(
     tags=["Messages"]
 )
 
+logger = logging.getLogger(__name__)
 
 # RAG 호출 시 함께 전달할 이전 대화 개수
 HISTORY_LIMIT = 20
+
+#AUTO 모드에서 자료를 고르지 않았을 때 넘길 READY 자료 최대 개수(AI 제한 100개)
+AUTO_RESOURCE_LIMIT = 100
 
 
 # 같은 시각(초 단위)에 저장된 메시지는 USER → ASSISTANT 순으로 정렬
@@ -80,10 +85,10 @@ def send_message(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # RESOURCE 모드: 자료 소유 여부 및 처리 상태 확인
+    # RESOURCE 모드, 또는 AUTO 모드에서 자료를 골랐을 때: 소유 여부 및 처리상태 확인
     resources: list[Resources] = []
 
-    if body.mode == "RESOURCE":
+    if body.mode == "RESOURCE" or (body.mode == "AUTO" and body.resource_ids):
         found = db.scalars(
             select(Resources).where(
                 Resources.id.in_(body.resource_ids),
@@ -113,6 +118,19 @@ def send_message(
             )
 
         resources = [found_by_id[rid] for rid in body.resource_ids]
+    elif body.mode == "AUTO":
+        #고른 자료가 없으면 사용자의 READY 자료를 최근 것부터 검색 범위로 넘긴다
+        resources = list(
+            db.scalars(
+                select(Resources)
+                .where(
+                    Resources.user_id == current_user.id,
+                    Resources.status == "READY",
+                )
+                .order_by(Resources.created_at.desc())
+                .limit(AUTO_RESOURCE_LIMIT)
+            ).all()
+        )
 
     # 이전 대화 기록 (오래된 순)
     recent = db.scalars(
@@ -126,12 +144,15 @@ def send_message(
     # AI 답변 생성
     try:
         answer = rag.generate_answer(
+            user_id=current_user.id,
             mode=body.mode,
             message=body.message,
             resources=resources,
             history=history,
         )
-    except rag.RagServiceError:
+    except rag.RagServiceError as exc:
+        # 원인은 서버 로그에만 남기고, 프론트에는 명세의 공통 에러 형식으로 보낸다
+        logger.warning("RAG answer failed: %s", exc)
         raise AppError(
             status.HTTP_502_BAD_GATEWAY,
             "RAG_SERVICE_UNAVAILABLE",
@@ -150,19 +171,20 @@ def send_message(
         user_id=current_user.id,
         role="USER",
         content=body.message,
-        mode=body.mode,
+        mode=answer.mode,
         created_at=now,
     )
     assistant_message = Message(
         user_id=current_user.id,
         role="ASSISTANT",
         content=answer.content,
-        mode=body.mode,
+        mode=answer.mode,
         # 같은 시각이면 _ROLE_ORDER 로 USER → ASSISTANT 순 정렬
         created_at=now,
         citations=[
             Citation(
                 resource_id=c.resource_id,
+                chunk_id=c.chunk_id,
                 excerpt=c.excerpt,
                 locator=c.locator,
                 position=i,
@@ -183,7 +205,8 @@ def send_message(
 
     return MessageAnswerResponse(
         answer_id=assistant_message.id,
-        mode=body.mode,
+        mode=answer.mode,
+        status=answer.status,
         content=assistant_message.content,
         citations=[
             CitationResponse(

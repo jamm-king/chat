@@ -34,6 +34,7 @@ def request(
     json: Optional[Dict[str, Any]] = None,
     cookies: Optional[Dict[str, str]] = None,
     with_service_token: bool = True,
+    timeout: Optional[float] = None,
 ) -> httpx.Response:
     headers = {}
     if with_service_token:
@@ -46,7 +47,7 @@ def request(
     try:
         with httpx.Client(
             base_url=AI_SERVICE_URL,
-            timeout=AI_TIMEOUT_SECONDS,
+            timeout=timeout or AI_TIMEOUT_SECONDS,
             follow_redirects=False,
         ) as client:
             return client.request(method, path, params=params, json=json, headers=headers)

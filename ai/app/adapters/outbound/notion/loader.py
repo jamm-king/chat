@@ -4,9 +4,9 @@ from uuid import UUID
 
 from langchain_core.documents import Document
 
-from app.notion_client import NotionClient, NotionPage, invalid_response
-from app.schemas import NotionPageSummary
-from app.references import extract_references
+from app.adapters.outbound.notion.client import NotionClient, NotionPage, invalid_response
+from app.adapters.outbound.notion.models import NotionPageSummary
+from app.adapters.outbound.notion.references import extract_references
 
 
 def extract_title(page: NotionPage) -> str | None:

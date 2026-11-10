@@ -9,7 +9,7 @@ from cryptography.fernet import Fernet
 from pydantic import ValidationError
 
 from app.config import Settings
-from app.schemas import NotionTokenResponse
+from app.adapters.outbound.notion.models import NotionTokenResponse
 
 
 @dataclass(frozen=True)
