@@ -44,3 +44,246 @@
 :root[data-theme="dark"] .guide {
   box-shadow: var(--neon-glow-soft);
 }
+.guide-dots {
+  display: flex;
+  gap: 6px;
+  margin: 14px 0 16px;
+}
+
+.guide-dots span {
+  width: 22px;
+  height: 4px;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+.guide-dots span.on {
+  background: var(--accent);
+}
+
+.guide-step {
+  margin: 14px 0 4px;
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.guide-title {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.guide-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: keep-all;
+}
+
+.guide-tip {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.guide-btns {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 18px;
+}
+
+.guide-btns button {
+  padding: 9px 16px;
+  border-radius: 3px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.guide-prev {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+}
+
+.guide-next {
+  border: 0;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.guide-btns button:disabled {
+  border-color: transparent;
+  background: var(--disabled-bg);
+  color: var(--disabled-text);
+  cursor: not-allowed;
+}
+
+.gp {
+  position: relative;
+  height: 170px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--accent-soft);
+}
+
+.gp-win {
+  position: absolute;
+  inset: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.gp-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.gp-bar i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.gp-line {
+  height: 7px;
+  margin: 9px 0;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+.gp-side {
+  position: absolute;
+  top: 30px;
+  left: 12px;
+  width: 120px;
+}
+
+.gp-btn {
+  padding: 7px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--on-accent);
+  text-align: center;
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.gp-cursor {
+  position: absolute;
+  top: 44px;
+  left: 120px;
+  width: 14px;
+  height: 14px;
+  fill: var(--text);
+  stroke: var(--bg);
+  stroke-width: 1.5;
+}
+
+.gp-body {
+  position: absolute;
+  top: 36px;
+  left: 150px;
+  right: 12px;
+}
+
+.gp-center {
+  position: absolute;
+  inset: 20px 0 0;
+  display: grid;
+  place-items: center;
+}
+
+.gp-login {
+  width: 190px;
+}
+
+.gp-login p {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.gp-field {
+  height: 22px;
+  margin: 6px 0;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.gp-field.gp-dark {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
+  text-align: center;
+}
+
+.gp-pages {
+  padding-top: 6px;
+}
+
+.gp-page {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+}
+
+.gp-page.gp-off {
+  color: var(--muted);
+}
+
+.gp-box {
+  display: grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid var(--muted);
+  border-radius: 3px;
+}
+
+.gp-box.on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.gp-allow {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  padding: 5px 12px;
+  border-radius: 3px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 11px;
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.gp-done {
+  font-size: 13px;
+  text-align: center;
+}
+
+.gp-ring {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin: 0 auto 6px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}

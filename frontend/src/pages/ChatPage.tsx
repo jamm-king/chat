@@ -144,7 +144,12 @@ export default function ChatPage() {
                     <button type="submit" disabled={!text.trim()}>보내기</button>
                 </form>
             </main>
-            {guideOpen && <NotionGuide onClose={() => setGuideOpen(false)} />}
+            {guideOpen && (
+                <NotionGuide
+                    onClose={() => setGuideOpen(false)}
+                    onConnect={connections.length > 0 ? undefined : connectNotion}
+                />
+            )}
 
         </div>
     );
