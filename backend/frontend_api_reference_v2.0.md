@@ -498,7 +498,13 @@ Error Response:
 
 **`POST /api/v1/messages`**
 
-- **mode** (선택, 기본값 `AUTO`): `GENERAL`, `RESOURCE`, `AUTO`
+| 필드 | 타입 | 필수 | 규칙 |
+| :--- | :--- | :--- | :--- |
+| `mode` | string | 선택 (기본값 `AUTO`) | `GENERAL`, `RESOURCE`, `AUTO` 중 하나. 대문자로 정확히 적어야 함 (`"auto"`, `null`은 `422`) |
+| `message` | string | 필수 | 1~4,000자. 공백만 있는 문자열은 `422` |
+| `resourceIds` | string[] | `RESOURCE`에서만 필수 | 최대 100개. 배열이 아니거나 `null`이면 `422` |
+
+- **mode**
 - `GENERAL`: 일반 대화. 자료를 검색하지 않음
 - `RESOURCE`: 등록된 자료를 기반으로 하는 RAG 대화
 - `AUTO`: RAG 시스템이 질문을 보고 `GENERAL`과 `RESOURCE` 중 하나를 판단함. `mode`를 생략하면 `AUTO`
@@ -512,10 +518,12 @@ Error Response:
 | `AUTO` + `resourceIds` | 고른 자료를 참고하되, 자료가 필요한 질문인지는 RAG 시스템이 판단 | 고른 자료 |
 | `AUTO` (자료 선택 없음, 또는 `mode` 생략) | 자료 필요 여부와 범위를 RAG 시스템이 판단 | 사용자의 `READY` 자료 (최근 등록 순, 최대 100개) |
 
+- "자료 선택 없음"은 `resourceIds`를 빼거나 빈 배열 `[]`로 보낸 경우입니다. 둘은 같게 처리합니다.
+
 - `resourceIds`는 [3.1.2] 자료 목록의 `resourceId`입니다. 사용자가 채팅 화면에서 자료를 골랐을 때 보냅니다.
 - `RESOURCE`와 `AUTO`에서 보낸 `resourceIds`는 같은 규칙으로 검사합니다 (본인 자료인지, `READY`인지). 아래 Error Response 참고.
 
-- `resourceIds`는 한 번에 최대 100개까지 보낼 수 있습니다.
+- `resourceIds`는 한 번에 최대 100개까지 보낼 수 있습니다. 개수는 중복을 지우기 전 기준이므로, 같은 ID를 여러 번 넣어도 100개를 넘으면 `422`입니다.
 - `AUTO`에서 자료를 고르지 않았고 `READY` 자료도 없으면, RAG 시스템은 일반 대화(`GENERAL`)로 답하거나 자료가 필요한 질문이면 `RESOURCE` + `INSUFFICIENT_EVIDENCE`로 답합니다.
 - RAG 시스템이 검색을 했다면 근거가 부족하거나 거절한 경우에도 응답 `mode`는 `RESOURCE`입니다.
 
@@ -589,9 +597,10 @@ Error Response:
 | `409` | `RESOURCE_SCOPE_CHANGED` | 답변을 만드는 동안 자료가 삭제되거나 바뀜. 메시지는 저장되지 않음. 자료 목록을 새로 받은 뒤 다시 보내야 함 | `false` |
 | `409` | `ANSWER_IN_PROGRESS` | 이전 메시지의 답변을 아직 만드는 중 (사용자별로 한 번에 하나만 생성). 답변이 끝난 뒤 다시 보내면 됨 | `true` |
 | `409` | `CONVERSATION_CLEARED` | 답변을 만드는 동안 대화 기록이 초기화됨([4.1.3]). 이 답변은 저장되지 않으므로 화면에서 버리면 됨 | `false` |
-| `422` | `VALIDATION_ERROR` | `GENERAL`·`RESOURCE`·`AUTO`가 아닌 `mode`, 빈 `message`, `RESOURCE` 모드에서 `resourceIds` 누락, `resourceIds` 100개 초과 | `false` |
+| `422` | `VALIDATION_ERROR` | `GENERAL`·`RESOURCE`·`AUTO`가 아닌 `mode`(소문자·`null` 포함), `message` 누락·빈 문자열·공백만 있음·4,000자 초과, `RESOURCE` 모드에서 `resourceIds` 누락 또는 `[]`, `resourceIds`가 배열이 아님, `resourceIds` 100개 초과 | `false` |
 | `502` | `RAG_SERVICE_UNAVAILABLE` | RAG 시스템 답변 생성 실패 | `true` |
 
+- 토큰이 없거나 만료된 경우의 `401`은 [7. 공통 인증 요청]을 참고하세요.
 - 오류가 나면 사용자 메시지와 답변 모두 저장되지 않습니다. 대화 기록에는 답변까지 성공한 질문만 남습니다.
 
 ### 4.1.2 대화 기록 조회 요청
@@ -735,6 +744,16 @@ GET /api/v1/users/me
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsIn...
 ```
 
+인증 실패 시 Error Response (인증이 필요한 모든 API 공통):
+
+| Status | Code | 설명 |
+| :--- | :--- | :--- |
+| `401` | `AUTH_MISSING_TOKEN` | `Authorization` 헤더가 없음 |
+| `401` | `AUTH_INVALID_ACCESS_TOKEN` | 토큰이 잘못됐거나 만료됨. `/api/v1/auth/refresh`로 재발급 후 다시 요청 |
+| `401` | `AUTH_INVALID_TOKEN_TYPE` | Access Token이 아닌 토큰(Refresh Token 등)을 보냄 |
+| `401` | `AUTH_TOKEN_USER_MISSING` | 토큰에 사용자 정보가 없음 |
+| `404` | `USER_NOT_FOUND` | 토큰의 사용자가 존재하지 않음 (탈퇴 등) |
+
 ---
 
 ## 8. 공통 에러 응답 형식
@@ -853,6 +872,8 @@ Frontend
 - 답변 생성 중 RAG 시스템이 자료 문제를 알리면 `502` 대신 `404 RESOURCE_NOT_FOUND` / `409 RESOURCE_NOT_READY` / `409 RESOURCE_SCOPE_CHANGED`로 전달
 - 답변을 저장하기 직전에 출처 자료가 아직 `READY`인지 다시 확인
 - 사용자별로 한 번에 하나의 답변만 생성, 생성 중 대화를 초기화하면 늦은 답변은 저장하지 않음 ([4.1.3])
+- 메시지 전송 요청 필드 규칙 표 추가 ([4.1.1]): `message` 최대 4,000자·공백만 불가, `mode` 대문자, `resourceIds: []`는 선택 없음과 같음, 100개 제한은 중복 제거 전 기준
+- 인증 실패 에러 코드 정리 ([7])
 
 ### v2.5
 
