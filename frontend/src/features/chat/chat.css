@@ -17,7 +17,15 @@
 .chat-side {
   display: grid;
   grid-template-rows: 1fr auto;
+  gap: 16px;
+  min-height: 0;
   padding: 24px 20px;
+}
+
+/* 자료가 많아지면 왼쪽 칸 안에서만 스크롤 (로그아웃 단추는 아래에 그대로) */
+.chat-side-top {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .chat-main {
@@ -26,11 +34,40 @@
   min-height: 0;
 }
 
+/* 오른쪽 끝에는 화면에 고정된 밤낮 단추(36px)가 겹쳐 있어서 그만큼 비워 둔다 */
 .chat-head {
-  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 72px 20px 24px;
   border-bottom: 1px solid var(--line);
   font-size: 18px;
   font-weight: 200;
+}
+
+.chat-clear {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.chat-clear:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.chat-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: keep-all;
 }
 
 .chat-list {
@@ -41,12 +78,55 @@
   overflow-y: auto;
 }
 
+.chat-foot {
+  display: grid;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+}
+
+/* 대화에 참고할 자료를 골랐을 때 입력 칸 위에 보이는 줄 */
+.chat-scope {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  font-size: 13px;
+}
+
+.chat-scope-text {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chat-scope-clear {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.chat-count {
+  justify-self: end;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .chat-input {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
-  padding: 16px 24px;
-  border-top: 1px solid var(--line);
 }
 
 .chat-input input {
@@ -60,6 +140,7 @@
 
 .chat-input button {
   padding: 0 20px;
+  white-space: nowrap;
   border: 0;
   border-radius: 3px;
   background: var(--accent);
@@ -197,6 +278,135 @@
   cursor: pointer;
 }
 
-:root[data-theme="dark"] button.chat-guide-link {
+:root[data-theme="dark"] button.chat-guide-link:not(:disabled) {
+  box-shadow: none;
+}
+
+.bubble-text {
+  margin: 0;
+}
+
+.bubble-user.is-failed {
+  opacity: 0.55;
+}
+
+.bubble-fail {
+  justify-self: end;
+  margin: -6px 0 0;
+  color: var(--danger);
+  font-size: 13px;
+  word-break: keep-all;
+}
+
+.bubble-retry {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* 답 위의 꼬리표: 자료 참고 / 근거 없음 · 답할 수 없음 안내 */
+.bubble-tag {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.bubble-tag.is-note {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.cite-mark {
+  margin: 0 1px;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+/* 출처 카드 */
+.cites {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px dashed var(--line);
+  list-style: none;
+  white-space: normal;
+}
+
+.cite {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.cite-no {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.cite-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cite-excerpt {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.cite-link {
+  justify-self: start;
+  color: var(--accent);
+  font-size: 12px;
+  text-underline-offset: 3px;
+}
+
+/* 답을 기다리는 동안 점 세 개가 차례로 늘어난다 */
+.bubble-pending {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.bubble-pending .dots::after {
+  content: "";
+  animation: dots 1.2s steps(4, end) infinite;
+}
+
+@keyframes dots {
+  0% { content: ""; }
+  25% { content: "."; }
+  50% { content: ".."; }
+  75% { content: "..."; }
+}
+
+.bubble-slow {
+  font-size: 12px;
+}
+
+:root[data-theme="dark"] button.chat-clear:not(:disabled),
+:root[data-theme="dark"] button.chat-scope-clear:not(:disabled),
+:root[data-theme="dark"] button.bubble-retry:not(:disabled) {
   box-shadow: none;
 }
