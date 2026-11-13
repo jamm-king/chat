@@ -13,6 +13,7 @@
     --disabled-text: hsl(260, 19%, 85%);
 }
 :root[data-theme="dark"]{
+    color-scheme: dark; /* 스크롤 막대 · 체크 칸도 어두운 모양으로 */
     --bg: #09060f;
     --text: #efe9ff;
     --muted: #b8a9d8;
