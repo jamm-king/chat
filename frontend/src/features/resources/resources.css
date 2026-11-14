@@ -1,0 +1,321 @@
+/* 왼쪽 칸 자료 목록 */
+.res {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.res-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.res-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: inherit;
+}
+
+.res-add {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.res-add:disabled {
+  background: var(--disabled-bg);
+  color: var(--disabled-text);
+  cursor: not-allowed;
+}
+
+.res-hint,
+.res-error,
+.res-fail {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.res-hint {
+  color: var(--muted);
+}
+
+.res-error,
+.res-fail {
+  color: var(--danger);
+}
+
+.res-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.res-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.res-item .res-fail,
+.res-item .res-note {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.res-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.res-fail p {
+  display: inline;
+  margin: 0;
+}
+
+/* 글자처럼 보이는 작은 단추 (다시 등록 · 노션 다시 연결) */
+.res-link {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.res-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.res-pick.off {
+  cursor: default;
+}
+
+.res-pick input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.res-title {
+  overflow: hidden;
+  font-size: 14px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.res-pick.off .res-title {
+  color: var(--muted);
+}
+
+.res-remove {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.res-remove:hover {
+  color: var(--danger);
+}
+
+/* 자료 상태 표시 */
+.chip {
+  padding: 2px 6px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.chip-processing {
+  color: var(--accent);
+}
+
+.chip-collected {
+  color: var(--muted);
+}
+
+.chip-ready {
+  color: #16a34a;
+}
+
+.chip-failed {
+  color: var(--danger);
+}
+
+:root[data-theme="dark"] .chip-ready {
+  color: #4ade80;
+}
+
+/* 노션 페이지 고르기 창 (노션 안내 창과 같은 모양) */
+.pick-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(20, 10, 40, 0.35);
+}
+
+.pick {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+  max-height: min(640px, 100vh - 32px);
+  padding: 22px 24px 20px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg);
+  box-shadow: 0 18px 50px rgba(20, 10, 40, 0.18);
+  box-sizing: border-box;
+}
+
+:root[data-theme="dark"] .pick {
+  box-shadow: var(--neon-glow-soft);
+}
+
+.pick-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pick-top h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: inherit;
+}
+
+.pick-close {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.pick-field {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: inherit;
+}
+
+.pick-field option {
+  background: var(--bg);
+}
+
+.pick-list {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.pick-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.pick-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pick-title {
+  overflow: hidden;
+  font-size: 14px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pick-date {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pick-add {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pick-add:disabled {
+  background: var(--disabled-bg);
+  color: var(--disabled-text);
+  cursor: not-allowed;
+}
+
+.pick-more {
+  align-self: center;
+  padding: 6px 16px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* 작은 단추와 체크 칸은 야간 네온 빛을 빼서 목록이 번져 보이지 않게 한다.
+   tokens.css 가 나중에 읽혀서, 같은 세기면 그쪽 네온 규칙이 이긴다 → :not(:disabled) 로 한 단계 높인다 */
+:root[data-theme="dark"] button.res-remove:not(:disabled),
+:root[data-theme="dark"] button.res-link:not(:disabled),
+:root[data-theme="dark"] button.pick-close:not(:disabled),
+:root[data-theme="dark"] .res-pick input:not(:disabled) {
+  box-shadow: none;
+}
